@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "skytrade",
+  "version": "${version}",
+  "name": "SkyTrade",
+  "description": "Market analysis terminal for the Hypixel SkyBlock economy: Bazaar, Auction House and craft flipping analysis, paper trading, backtesting and a fully simulated private sandbox. Never automates actions on Hypixel.",
+  "authors": ["SkyTrade contributors"],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/skytrade/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.skytrade.SkyTradeClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.17.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
