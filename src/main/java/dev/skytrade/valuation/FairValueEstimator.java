@@ -26,7 +26,13 @@ import java.util.*;
  * at most twice, so a few accounts trading an item back and forth cannot set its price.</p>
  */
 public final class FairValueEstimator {
-    public record Params(int minComparables, double recoveryRate, double undercut, long lookbackMs, long halfLifeMs) {}
+    /** @param minEnchantCost enchant books cheaper than this are ignored when valuing upgrades */
+    public record Params(int minComparables, double recoveryRate, double undercut, long lookbackMs, long halfLifeMs,
+                         double minEnchantCost) {
+        public Params(int minComparables, double recoveryRate, double undercut, long lookbackMs, long halfLifeMs) {
+            this(minComparables, recoveryRate, undercut, lookbackMs, halfLifeMs, UpgradeValuer.DEFAULT_MIN_ENCHANT_COST);
+        }
+    }
 
     /** Max comparable sales any single seller may contribute. */
     static final int MAX_PER_SELLER = 2;
@@ -62,7 +68,7 @@ public final class FairValueEstimator {
 
         List<SaleRecord> exact = filterWashTrades(recent(history.strict(strict), now, p.lookbackMs()), listingSeller, why, "exact");
         List<UpgradeComponent> ownUpgrades = UpgradeValuer.components(item, catalog);
-        UpgradeValuer.Result own = UpgradeValuer.value(ownUpgrades, prices, p.recoveryRate());
+        UpgradeValuer.Result own = UpgradeValuer.value(ownUpgrades, prices, p.recoveryRate(), p.minEnchantCost());
 
         String level;
         double[] values;
@@ -80,7 +86,7 @@ public final class FairValueEstimator {
                 // Exact matches share the value-dominant upgrades, but can still differ in smaller ones
                 // (cheaper enchants, extra books, slot unlocks). Correct for that when the record is complete.
                 if (!s.fullUpgrades()) continue;
-                double diff = own.value() - UpgradeValuer.value(decode(s.upgrades()), prices, p.recoveryRate()).value();
+                double diff = own.value() - UpgradeValuer.value(decode(s.upgrades()), prices, p.recoveryRate(), p.minEnchantCost()).value();
                 if (Math.abs(diff) > 1 && Math.abs(diff) <= s.price() * 0.5) {
                     values[i] = s.price() + diff;
                     adjusted++;
@@ -99,7 +105,7 @@ public final class FairValueEstimator {
             values = new double[used.size()];
             for (int i = 0; i < used.size(); i++) {
                 SaleRecord s = used.get(i);
-                double credit = UpgradeValuer.value(decode(s.upgrades()), prices, p.recoveryRate()).value();
+                double credit = UpgradeValuer.value(decode(s.upgrades()), prices, p.recoveryRate(), p.minEnchantCost()).value();
                 values[i] = Math.max(s.price() * 0.25, s.price() - credit); // never strip more than 75%
             }
             upgradeCredit = own.value();

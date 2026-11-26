@@ -95,6 +95,7 @@ public final class SettingsPage extends Page {
         num("AH max expected sale time", () -> c().strategy.ahMaxSaleHours, v -> c().strategy.ahMaxSaleHours = v, 1, 1, 336, Unit.HOURS);
         num("AH undercut", () -> c().strategy.ahUndercut, v -> c().strategy.ahUndercut = v, 0.005, 0, 0.2, Unit.PCT);
         num("Upgrade value recovery", () -> c().strategy.upgradeRecoveryRate, v -> c().strategy.upgradeRecoveryRate = v, 0.05, 0, 1, Unit.PCT);
+        num("Min enchant book value", () -> c().strategy.minEnchantValue, v -> c().strategy.minEnchantValue = v, 1_000, 0, 1_000_000, Unit.COINS);
         num("Craft sale haircut", () -> c().strategy.craftSaleHaircut, v -> c().strategy.craftSaleHaircut = v, 0.01, 0.5, 1, Unit.PCT);
 
         rows.add(new Section("Fees"));

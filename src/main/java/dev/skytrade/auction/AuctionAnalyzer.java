@@ -62,7 +62,7 @@ public final class AuctionAnalyzer {
     public List<AuctionOpportunity> analyze(AuctionIndex index, FairValueEstimator estimator, double maxCapital, long now) {
         SkyTradeConfig.Strategy s = config.strategy;
         FairValueEstimator.Params params = new FairValueEstimator.Params((int) Math.max(3, s.ahMinComparables),
-                s.upgradeRecoveryRate, s.ahUndercut, 7L * 86_400_000L, 2L * 86_400_000L);
+                s.upgradeRecoveryRate, s.ahUndercut, 7L * 86_400_000L, 2L * 86_400_000L, Math.max(0, s.minEnchantValue));
         List<AuctionOpportunity> local = new ArrayList<>();
         List<Pending> market = new ArrayList<>();
         SkyTradeConfig.External ext = config.external;
@@ -126,7 +126,7 @@ public final class AuctionAnalyzer {
         double resale = lowest * (1 - p.undercut());
         why.add(competing.size() + " identical listings from other sellers; cheapest " + Fmt.coins(lowest)
                 + ", next " + Fmt.coins(competing.get(Math.min(1, competing.size() - 1))) + ". Undercut to " + Fmt.coins(resale) + ".");
-        UpgradeValuer.Result up = UpgradeValuer.value(UpgradeValuer.components(a, catalog), prices, p.recoveryRate());
+        UpgradeValuer.Result up = UpgradeValuer.value(UpgradeValuer.components(a, catalog), prices, p.recoveryRate(), p.minEnchantCost());
         double cap = Math.min(h.high(), Math.max(h.median(), h.recent()) * 1.25 + up.value());
         if (resale > cap) {
             why.add("Capped at " + Fmt.coins(cap) + ": 7-day median " + Fmt.coins(h.median()) + " x1.25 + upgrades "
@@ -197,7 +197,7 @@ public final class AuctionAnalyzer {
 
         List<String> ups = new ArrayList<>();
         for (UpgradeComponent c : UpgradeValuer.components(a, catalog)) {
-            if (UpgradeValuer.kind(c.itemId()) == UpgradeValuer.Kind.ENCHANT && !c.itemId().matches(".*_([6-9]|10)$")) continue;
+            if (UpgradeValuer.kind(c.itemId()) == UpgradeValuer.Kind.ENCHANT && !c.itemId().matches(".*_([5-9]|10)$")) continue;
             String label = c.label().equals("Enchant book") || c.label().equals("Upgrade") ? Fmt.prettyId(c.itemId().replace("ENCHANTMENT_", "")) : c.label();
             ups.add(label + (c.quantity() > 1 ? " x" + c.quantity() : ""));
         }

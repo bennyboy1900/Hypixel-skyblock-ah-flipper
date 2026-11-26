@@ -153,8 +153,8 @@ Each upgrade kind has its own recovery rate. The configured base rate (55%) is m
 per kind and capped at 95%. Gemstones, scrolls, pet items and master stars recover the most;
 potato books, reforge stones and gem-slot unlocks the least. Upgrades that are valued:
 - **every enchantment**, priced from bazaar books. A missing level is derived from the highest
-  priced lower level (2 books of level N make N+1), with a 20% haircut. Books worth less than 150k
-  are ignored.
+  priced lower level (2 books of level N make N+1), with a 20% haircut. Only books worth less than
+  5k are ignored (`strategy.minEnchantValue`), so cheap items (around 1M) are valued correctly too.
 - recombobulator, hot and fuming potato books, Art of War/Peace, master stars, ability scrolls,
   power scrolls
 - gemstones, plus the coins and gems spent **unlocking gemstone slots** (from the items API)

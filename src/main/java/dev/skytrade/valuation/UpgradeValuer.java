@@ -15,14 +15,14 @@ import java.util.*;
  * upgrades (gemstones, scrolls, master stars, pet items, recombobulators) recover far more than consumed
  * ones (potato books, reforge stones, slot unlocks).</p>
  *
- * <p>Every enchantment is extracted. Cheap ones are filtered out at valuation time by
- * {@link #MIN_ENCHANT_COST}, so the decision uses the current price and comparables and listings are treated
- * the same way. If a book of the exact level has no price, it is derived from the highest priced lower level
+ * <p>Every enchantment is extracted. Only books cheaper than the configured minimum (default
+ * {@link #DEFAULT_MIN_ENCHANT_COST}) are ignored at valuation time, so comparables and listings are treated the
+ * same way. A low threshold matters for cheap items: on a 1M item, a few 20-100k books are a large part of the price. If a book of the exact level has no price, it is derived from the highest priced lower level
  * (two books of level N combine into N+1), with a 20% haircut, because derived prices are less reliable.</p>
  */
 public final class UpgradeValuer {
-    /** Enchant books whose full cost is below this are noise on an item price and are ignored. */
-    public static final double MIN_ENCHANT_COST = 150_000;
+    /** Default: enchant books whose full cost is below this are ignored (they barely move any price). */
+    public static final double DEFAULT_MIN_ENCHANT_COST = 5_000;
     /** Never credit more than this fraction of an upgrade's cost, whatever the weights say. */
     private static final double MAX_RECOVERY = 0.95;
     private static final double DERIVED_HAIRCUT = 0.8;
@@ -157,8 +157,17 @@ public final class UpgradeValuer {
 
     public record Result(double value, double fullCost, int priced, int unpriced, List<String> lines) {}
 
-    /** Values components at their kind's share of the configured base recovery rate. */
+    /** Values components at their kind's share of the base recovery rate, ignoring enchants under 5k. */
     public static Result value(List<UpgradeComponent> comps, PriceSource prices, double baseRecovery) {
+        return value(comps, prices, baseRecovery, DEFAULT_MIN_ENCHANT_COST);
+    }
+
+    /**
+     * Values components at their kind's share of the configured base recovery rate.
+     *
+     * @param minEnchantCost enchant books with a full cost below this are ignored
+     */
+    public static Result value(List<UpgradeComponent> comps, PriceSource prices, double baseRecovery, double minEnchantCost) {
         double value = 0, full = 0;
         int priced = 0, unpriced = 0;
         List<String> lines = new ArrayList<>();
@@ -175,7 +184,7 @@ public final class UpgradeValuer {
                 continue;
             }
             double cost = p.price * c.quantity();
-            if (kind == Kind.ENCHANT && cost < MIN_ENCHANT_COST) continue;
+            if (kind == Kind.ENCHANT && cost < minEnchantCost) continue;
             double rate = recovery(kind, baseRecovery);
             priced++;
             full += cost;

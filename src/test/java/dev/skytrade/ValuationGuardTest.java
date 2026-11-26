@@ -52,6 +52,24 @@ class ValuationGuardTest {
     }
 
     @Test
+    void cheapEnchantsCountOnCheapItems() {
+        // A ~1M item: 50k and 20k books matter, a 3k book does not.
+        ItemAttributes a = item("SWORD", Map.of("sharpness", 5, "critical", 5, "vampirism", 5), Map.of(), List.of());
+        PriceSource prices = id -> switch (id) {
+            case "ENCHANTMENT_SHARPNESS_5" -> 50_000;
+            case "ENCHANTMENT_CRITICAL_5" -> 20_000;
+            case "ENCHANTMENT_VAMPIRISM_5" -> 3_000;
+            default -> Double.NaN;
+        };
+        UpgradeValuer.Result r = UpgradeValuer.value(UpgradeValuer.components(a), prices, 0.55);
+        assertEquals(2, r.priced(), r.lines().toString());
+        assertEquals(70_000, r.fullCost(), 1e-6);
+        // The threshold is configurable.
+        assertEquals(1, UpgradeValuer.value(UpgradeValuer.components(a), prices, 0.55, 30_000).priced());
+        assertEquals(3, UpgradeValuer.value(UpgradeValuer.components(a), prices, 0.55, 0).priced());
+    }
+
+    @Test
     void recoveryDependsOnUpgradeKind() {
         double base = 0.55;
         assertTrue(UpgradeValuer.recovery(UpgradeValuer.Kind.GEMSTONE, base) > UpgradeValuer.recovery(UpgradeValuer.Kind.HOT_POTATO, base));

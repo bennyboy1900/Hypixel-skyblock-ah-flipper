@@ -138,6 +138,8 @@ public final class SkyTradeConfig {
         public double ahMaxSaleHours = 48;
         public double ahUndercut = 0.01;
         public double upgradeRecoveryRate = 0.55;
+        /** Enchant books cheaper than this are ignored when valuing an item (all others are counted). */
+        public double minEnchantValue = 5_000;
         public double craftSaleHaircut = 0.95;
         public int bazaarTopN = 250;
         public int auctionTopN = 150;
