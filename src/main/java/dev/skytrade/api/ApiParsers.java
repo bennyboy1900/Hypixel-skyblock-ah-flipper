@@ -82,8 +82,8 @@ public final class ApiParsers {
             String id = str(a, "auction_id", null);
             long price = lng(a, "price");
             String bytes = str(a, "item_bytes", null);
-            if (id == null || price <= 0 || bytes == null) continue;
-            out.add(new EndedAuction(id, price, bool(a, "bin"), lng(a, "timestamp"), bytes));
+            if (id == null || !dev.skytrade.util.Stats.plausibleCoins(price) || bytes == null) continue;
+            out.add(new EndedAuction(id, price, bool(a, "bin"), lng(a, "timestamp"), bytes, str(a, "seller", null), str(a, "buyer", null)));
         }
         return out;
     }
@@ -100,9 +100,33 @@ public final class ApiParsers {
             JsonArray gems = arr(i, "gemstone_slots");
             out.put(id, new SkyblockItem(id, str(i, "name", id), str(i, "material", "PAPER"), str(i, "tier", "COMMON"),
                     str(i, "category", ""), num(i, "npc_sell_price"), bool(i, "dungeon_item"),
-                    gems == null ? 0 : gems.size(), str(i, "skin", "")));
+                    gems == null ? 0 : gems.size(), str(i, "skin", ""), gemSlots(gems)));
         }
         return new ItemCatalog(lng(root, "lastUpdated"), fetchedAt, Collections.unmodifiableMap(out));
+    }
+
+    /** Parses {@code gemstone_slots[].costs} (COINS or ITEM entries). Malformed entries are skipped. */
+    static List<SkyblockItem.GemSlot> gemSlots(JsonArray gems) {
+        if (gems == null) return List.of();
+        List<SkyblockItem.GemSlot> out = new ArrayList<>();
+        for (JsonElement g : gems) {
+            if (!g.isJsonObject()) continue;
+            JsonObject slot = g.getAsJsonObject();
+            Map<String, Integer> costs = new LinkedHashMap<>();
+            JsonArray c = arr(slot, "costs");
+            if (c != null) {
+                for (JsonElement ce : c) {
+                    if (!ce.isJsonObject()) continue;
+                    JsonObject co = ce.getAsJsonObject();
+                    String type = str(co, "type", "");
+                    if ("COINS".equals(type)) costs.merge("COINS", (int) lng(co, "coins"), Integer::sum);
+                    else if ("ITEM".equals(type) && str(co, "item_id", null) != null)
+                        costs.merge(str(co, "item_id", null), (int) Math.max(1, lng(co, "amount")), Integer::sum);
+                }
+            }
+            out.add(new SkyblockItem.GemSlot(str(slot, "slot_type", "UNKNOWN"), Map.copyOf(costs)));
+        }
+        return List.copyOf(out);
     }
 
     // ---- tolerant accessors ----

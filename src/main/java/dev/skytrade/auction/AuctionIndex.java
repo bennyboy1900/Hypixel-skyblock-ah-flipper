@@ -7,15 +7,18 @@ import java.util.*;
 
 /** Per-snapshot index of active BIN listings grouped by fingerprint. Immutable once built. */
 public final class AuctionIndex {
-    public static final AuctionIndex EMPTY = new AuctionIndex(0, Map.of(), Map.of(), 0, 0);
+    public static final AuctionIndex EMPTY = new AuctionIndex(0, Map.of(), Map.of(), Map.of(), 0, 0);
 
     private final long lastUpdated;
     private final Map<String, List<DecodedAuction>> byStrict;
     private final Map<String, Long> lowestCleanBinByBase;
+    private final Map<String, DecodedAuction> byUuid;
     private final int decoded;
     private final int failed;
 
-    private AuctionIndex(long lastUpdated, Map<String, List<DecodedAuction>> byStrict, Map<String, Long> lowest, int decoded, int failed) {
+    private AuctionIndex(long lastUpdated, Map<String, List<DecodedAuction>> byStrict, Map<String, Long> lowest,
+                         Map<String, DecodedAuction> byUuid, int decoded, int failed) {
+        this.byUuid = byUuid;
         this.lastUpdated = lastUpdated;
         this.byStrict = byStrict;
         this.lowestCleanBinByBase = lowest;
@@ -26,6 +29,7 @@ public final class AuctionIndex {
     public static AuctionIndex build(AuctionSnapshot snap, ItemDecoder decoder) {
         Map<String, List<DecodedAuction>> byStrict = new HashMap<>();
         Map<String, Long> lowest = new HashMap<>();
+        Map<String, DecodedAuction> byUuid = new HashMap<>();
         int ok = 0, bad = 0;
         for (ActiveAuction a : snap.auctions()) {
             if (!a.bin()) continue;
@@ -39,10 +43,12 @@ public final class AuctionIndex {
             if (at.count() != 1) continue; // stacks are not comparable per-unit here
             DecodedAuction d = new DecodedAuction(a, at, Fingerprint.strict(at), Fingerprint.relaxed(at), Fingerprint.base(at));
             byStrict.computeIfAbsent(d.strict(), k -> new ArrayList<>()).add(d);
+            byUuid.put(a.uuid().replace("-", ""), d);
             if (isClean(at)) lowest.merge(at.skyblockId(), a.startingBid(), Math::min);
         }
         for (List<DecodedAuction> l : byStrict.values()) l.sort(Comparator.comparingLong(x -> x.auction().startingBid()));
-        return new AuctionIndex(snap.lastUpdated(), Collections.unmodifiableMap(byStrict), Collections.unmodifiableMap(lowest), ok, bad);
+        return new AuctionIndex(snap.lastUpdated(), Collections.unmodifiableMap(byStrict), Collections.unmodifiableMap(lowest),
+                Collections.unmodifiableMap(byUuid), ok, bad);
     }
 
     static boolean isClean(ItemAttributes a) {
@@ -62,6 +68,15 @@ public final class AuctionIndex {
     public double lowestCleanBin(String id) {
         Long v = lowestCleanBinByBase.get(id);
         return v == null ? Double.NaN : v;
+    }
+
+    /** An active single-item BIN listing by auction uuid (with or without dashes), or null. */
+    public DecodedAuction byUuid(String uuid) {
+        return uuid == null ? null : byUuid.get(uuid.replace("-", ""));
+    }
+
+    public boolean isEmpty() {
+        return byUuid.isEmpty();
     }
 
     public long lastUpdated() {

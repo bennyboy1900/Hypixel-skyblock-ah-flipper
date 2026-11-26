@@ -29,7 +29,11 @@ public final class NotificationService {
     }
 
     public void post(Notification.Level level, String title, String message) {
-        Notification n = new Notification(time.now(), level, title, message);
+        post(level, title, message, null);
+    }
+
+    public void post(Notification.Level level, String title, String message, String suggestCommand) {
+        Notification n = new Notification(time.now(), level, title, message, suggestCommand);
         history.add(n);
         if (pending.size() < 50) pending.add(n);
     }
@@ -63,18 +67,26 @@ public final class NotificationService {
     /** Alerts about exceptional opportunities, rate-limited per item to once per hour. */
     public void checkOpportunities(List<? extends Opportunity> opps) {
         SkyTradeConfig.Notifications n = config.get().notifications;
+        SkyTradeConfig.Assist assist = config.get().assist;
         if (!n.opportunityAlerts) return;
         long now = time.now();
         int sent = 0;
         for (Opportunity o : opps) {
             if (sent >= 2) break;
-            if (o.adjustedProfitPerHour() < n.opportunityAlertMinProfitPerHour || o.quantity() <= 0) continue;
+            if (o.quantity() <= 0) continue;
+            if (assist.alertOnlyConfirmed && !o.confirmed()) continue;
+            boolean ahFlip = o.kind() == Opportunity.Kind.AUCTION_FLIP;
+            boolean worth = o.adjustedProfitPerHour() >= n.opportunityAlertMinProfitPerHour
+                    || (ahFlip && o.netProfit() >= assist.alertMinProfit);
+            if (!worth) continue;
             Long last = lastAlert.get(o.key());
             if (last != null && now - last < 3_600_000L) continue;
             lastAlert.put(o.key(), now);
             sent++;
+            String cmd = assist.clickableAlerts ? o.navigationCommand() : null;
             post(Notification.Level.SUCCESS, "Opportunity", o.name() + ": " + Fmt.coins(o.adjustedProfitPerHour()) + "/h risk-adjusted, "
-                    + Fmt.signedCoins(o.netProfit()) + " net  " + o.navigationCommand());
+                    + Fmt.signedCoins(o.netProfit()) + " net" + (ahFlip ? " (buy " + Fmt.coins(o.entryPrice()) + ", sell "
+                    + Fmt.coins(o.exitPrice()) + ")" : "") + (cmd == null ? "  " + o.navigationCommand() : ""), cmd);
         }
         if (lastAlert.size() > 2000) lastAlert.clear();
     }

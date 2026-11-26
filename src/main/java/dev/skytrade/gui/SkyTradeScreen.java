@@ -27,7 +27,7 @@ import java.util.Map;
 /** The SkyTrade terminal: persistent left sidebar, header with live status, and the active page. */
 public final class SkyTradeScreen extends Screen {
     public enum Nav {
-        DASHBOARD("Dashboard"), BAZAAR("Bazaar"), AUCTIONS("Auction House"), CRAFTS("Craft Flips"), ORDERS("Orders"),
+        DASHBOARD("Dashboard"), BAZAAR("Bazaar"), AUCTIONS("Auction House"), DEALS("Deals"), CRAFTS("Craft Flips"), ORDERS("Orders"),
         PORTFOLIO("Portfolio"), ANALYTICS("Analytics"), SETTINGS("Settings");
 
         public final String label;
@@ -54,6 +54,7 @@ public final class SkyTradeScreen extends Screen {
         pages.put(Nav.DASHBOARD, new DashboardPage(this));
         pages.put(Nav.BAZAAR, new BazaarPage(this));
         pages.put(Nav.AUCTIONS, new AuctionPage(this));
+        pages.put(Nav.DEALS, new DealsPage(this));
         pages.put(Nav.CRAFTS, new CraftPage(this));
         pages.put(Nav.ORDERS, new OrdersPage(this));
         pages.put(Nav.PORTFOLIO, new PortfolioPage(this));

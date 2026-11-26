@@ -128,15 +128,24 @@ public final class Backtester {
         return p == null ? null : p.bestBid() * (1 - cfg.fees.bazaarTax);
     }
 
+    /**
+     * Competing orders assumed within 0.5% of the top of each side. Stored history has no order counts.
+     * Measured on a full Hypixel book (2026-11-26): median 14 (buy side) / 18 (sell side) for the 50 most
+     * traded items, 9 / 11 for ranks 50-300. 14 gives a captured share of about 17% instead of the
+     * optimistic 36% that the previous assumption of 5 orders implied.
+     */
+    static final int ASSUMED_COMPETITORS = 14;
+
     /** Rebuilds a bazaar snapshot from stored top-of-book history (single level per side, conservative competition). */
     static BazaarSnapshot synthesize(Map<String, PricePoint> latest, long t) {
         Map<String, BazaarProduct> products = new HashMap<>();
         for (Map.Entry<String, PricePoint> e : latest.entrySet()) {
             PricePoint p = e.getValue();
             if (t - p.timestamp() > 30 * 60_000L || !(p.bid() > 0) || !(p.ask() > 0)) continue;
-            List<OrderLevel> bids = List.of(new OrderLevel(p.bid(), Math.max(1, (long) p.bidDepth()), 5));
-            List<OrderLevel> asks = List.of(new OrderLevel(p.ask(), Math.max(1, (long) p.askDepth()), 5));
-            QuickStatus q = new QuickStatus(p.bid(), (long) p.bidDepth(), (long) p.sellMovingWeek(), 5, p.ask(), (long) p.askDepth(), (long) p.buyMovingWeek(), 5);
+            int n = ASSUMED_COMPETITORS;
+            List<OrderLevel> bids = List.of(new OrderLevel(p.bid(), Math.max(1, (long) p.bidDepth()), n));
+            List<OrderLevel> asks = List.of(new OrderLevel(p.ask(), Math.max(1, (long) p.askDepth()), n));
+            QuickStatus q = new QuickStatus(p.bid(), (long) p.bidDepth(), (long) p.sellMovingWeek(), n, p.ask(), (long) p.askDepth(), (long) p.buyMovingWeek(), n);
             products.put(e.getKey(), new BazaarProduct(e.getKey(), bids, asks, q));
         }
         return new BazaarSnapshot(t, t, products);

@@ -23,6 +23,7 @@ public final class SkyTradeCommands {
                 .executes(c -> open(SkyTradeScreen.Nav.DASHBOARD))
                 .then(literal("bazaar").executes(c -> open(SkyTradeScreen.Nav.BAZAAR)))
                 .then(literal("ah").executes(c -> open(SkyTradeScreen.Nav.AUCTIONS)))
+                .then(literal("deals").executes(c -> open(SkyTradeScreen.Nav.DEALS)))
                 .then(literal("portfolio").executes(c -> open(SkyTradeScreen.Nav.PORTFOLIO)))
                 .then(literal("settings").executes(c -> open(SkyTradeScreen.Nav.SETTINGS)))
                 .then(literal("status").executes(SkyTradeCommands::status))
@@ -80,6 +81,8 @@ public final class SkyTradeCommands {
             msg(c, "  " + e.name().toLowerCase() + ": " + age + (s.consecutiveFailures > 0 ? ", failing: " + s.lastError : ""),
                     s.consecutiveFailures > 0 ? Formatting.RED : Formatting.GRAY);
         }
+        msg(c, "  Coflnet prices: " + core.external().status(), core.external().status().contains("BLOCKED") ? Formatting.RED : Formatting.GRAY);
+        msg(c, "  Coflnet deals: " + core.deals().deals().size() + " verified", Formatting.GRAY);
         var pv = core.portfolio();
         msg(c, "Paper portfolio " + Fmt.coins(pv.totalValue()) + " (cash " + Fmt.coins(pv.cash()) + ", today " + Fmt.signedCoins(pv.dailyProfit())
                 + ", " + pv.activeTrades().size() + " active)", Formatting.WHITE);
@@ -92,7 +95,7 @@ public final class SkyTradeCommands {
     }
 
     private static int help(CommandContext<FabricClientCommandSource> c) {
-        msg(c, "/skytrade [bazaar|ah|portfolio|settings|status|pause|resume|resetpaper|export]", Formatting.WHITE);
+        msg(c, "/skytrade [bazaar|ah|deals|portfolio|settings|status|pause|resume|resetpaper|export]", Formatting.WHITE);
         msg(c, "Manual Hypixel navigation (type these yourself): /bz <item>, /ah, /viewauction <uuid>", Formatting.GRAY);
         msg(c, "SkyTrade never sends commands or trades on your behalf on Hypixel.", Formatting.GRAY);
         return 1;

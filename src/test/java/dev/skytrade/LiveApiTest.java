@@ -36,7 +36,8 @@ class LiveApiTest {
         long deadline = System.currentTimeMillis() + 150_000;
         while (System.currentTimeMillis() < deadline && (core.results().bazaar().isEmpty() || core.market().auctions().auctions().isEmpty()))
             Thread.sleep(1000);
-        Thread.sleep(40_000); // let ended-auction polling, analysis and a few trader decisions run
+        // Let ended-auction polling, analysis, trader decisions and Coflnet history/deal fetches run.
+        Thread.sleep(Long.getLong("skytrade.liveWaitMs", 40_000L));
         var res = core.results();
         System.out.println("=== bazaar: " + core.market().bazaar().products().size() + " products, " + res.bazaar().size() + " opportunities, data age "
                 + Fmt.duration(core.market().bazaarAgeMs()));
@@ -57,6 +58,18 @@ class LiveApiTest {
                 + " escrow " + Fmt.coins(pv.escrow()) + " value " + Fmt.coins(pv.totalValue()));
         pv.activeTrades().forEach(t -> System.out.println("  " + t.name + " " + t.state + " " + t.targetQty + " @ " + t.buyPrice + " filled " + t.filledBuyQty));
         System.out.println("=== api: " + core.market().status().overall());
+        System.out.println("=== coflnet: " + core.external().status());
+        long market = res.auctions().stream().filter(o -> o.valuation().matchLevel().equals("MARKET")).count();
+        long confirmed = res.auctions().stream().filter(AuctionOpportunity::confirmed).count();
+        System.out.println("=== AH flips: " + res.auctions().size() + " (" + market + " market-valued, " + confirmed + " confirmed by 7-day history)");
+        for (AuctionOpportunity o : res.auctions().stream().filter(AuctionOpportunity::confirmed).limit(8).toList()) {
+            System.out.println("  [" + o.valuation().matchLevel() + "] " + o.name() + " buy " + Fmt.coins(o.listingPrice()) + " -> sell "
+                    + Fmt.coins(o.valuation().salePrice()) + " net " + Fmt.coins(o.netProfit()) + " conf " + Fmt.score(o.confidence())
+                    + " " + o.navigationCommand());
+        }
+        System.out.println("=== deals: " + core.deals().deals().size());
+        for (var d : core.deals().deals().subList(0, Math.min(8, core.deals().deals().size())))
+            System.out.println("  " + d.source() + ": " + d.name() + " cost " + Fmt.coins(d.cost()) + " net " + Fmt.coins(d.netProfit()) + "  " + d.command());
         assertFalse(res.bazaar().isEmpty());
         assertFalse(snap.auctions().isEmpty());
         assertEquals(cfg.sandbox.startingCapital, pv.totalValue(), cfg.sandbox.startingCapital * 0.05, "value conserved within 5% early on");

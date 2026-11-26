@@ -70,6 +70,11 @@ public interface Opportunity {
 
     List<String> explanation();
 
+    /** False when an independent check (e.g. 7-day price history) has not confirmed the numbers yet. */
+    default boolean confirmed() {
+        return true;
+    }
+
     /** Manual navigation reference (e.g. "/bz Enchanted Diamond"), never executed automatically. */
     String navigationCommand();
 }

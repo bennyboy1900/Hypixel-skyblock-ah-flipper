@@ -24,14 +24,14 @@ public final class AuctionPage extends Page {
 
     public AuctionPage(SkyTradeScreen screen) {
         super(screen);
-        table.column(new Table.Column<AuctionOpportunity>("Item", 100, 3f, LEFT, AuctionOpportunity::name, o -> Theme.TEXT,
+        table.column(new Table.Column<AuctionOpportunity>("Item", 100, 3f, LEFT, o -> o.confirmed() ? o.name() : o.name() + " (unconfirmed)", o -> o.confirmed() ? Theme.TEXT : Theme.YELLOW,
                         Comparator.comparing(AuctionOpportunity::name)).icon(o -> ItemIcons.forId(o.itemId(), core().market().catalog())))
                 .column(new Table.Column<AuctionOpportunity>("Price", 46, 1f, RIGHT, o -> Fmt.coins(o.listingPrice()), null, Comparator.comparingLong(AuctionOpportunity::listingPrice)).priority(8))
                 .column(new Table.Column<AuctionOpportunity>("Fair value", 50, 1f, RIGHT, o -> Fmt.coins(o.valuation().fairValue()), null, Comparator.comparingDouble(o -> o.valuation().fairValue())).priority(7))
                 .column(new Table.Column<AuctionOpportunity>("Net profit", 50, 1f, RIGHT, o -> Fmt.signedCoins(o.netProfit()), o -> Theme.signed(o.netProfit()), Comparator.comparingDouble(AuctionOpportunity::netProfit)).priority(9))
                 .column(new Table.Column<AuctionOpportunity>("ROI", 36, .6f, RIGHT, o -> Fmt.pct(o.roi()), o -> Theme.signed(o.roi()), Comparator.comparingDouble(AuctionOpportunity::roi)).priority(5))
                 .column(new Table.Column<AuctionOpportunity>("Sells in", 44, .7f, RIGHT, o -> Fmt.duration(o.valuation().saleHours() * 3.6e6), null, Comparator.comparingDouble(AuctionOpportunity::holdHours)).priority(6))
-                .column(new Table.Column<AuctionOpportunity>("Comps", 32, .5f, RIGHT, o -> o.valuation().comparables() + (o.valuation().matchLevel().equals("EXACT") ? "" : "~"), null, Comparator.comparingInt(o -> o.valuation().comparables())).priority(3))
+                .column(new Table.Column<AuctionOpportunity>("Comps", 32, .5f, RIGHT, o -> switch (o.valuation().matchLevel()) { case "EXACT" -> String.valueOf(o.valuation().comparables()); case "MARKET" -> "mkt"; default -> o.valuation().comparables() + "~"; }, null, Comparator.comparingInt(o -> o.valuation().comparables())).priority(3))
                 .column(new Table.Column<AuctionOpportunity>("Conf", 28, .5f, RIGHT, o -> Fmt.score(o.confidence()), o -> Theme.quality(o.confidence()), Comparator.comparingDouble(AuctionOpportunity::confidence)).priority(6))
                 .column(new Table.Column<AuctionOpportunity>("Upgrades", 70, 2f, LEFT, o -> String.join(", ", o.upgrades()), o -> Theme.MUTED, null).priority(2))
                 .column(new Table.Column<AuctionOpportunity>("Score", 34, .6f, RIGHT, o -> Fmt.num(o.score()), o -> Theme.BLUE, Comparator.comparingDouble(AuctionOpportunity::score)).priority(1))

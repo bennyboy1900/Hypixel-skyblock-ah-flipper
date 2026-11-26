@@ -2,5 +2,6 @@
   "key.category.skytrade.main": "SkyTrade",
   "key.skytrade.open": "Open SkyTrade terminal",
   "key.skytrade.toggle_hud": "Toggle SkyTrade HUD",
-  "key.skytrade.pause": "Pause / resume sandbox trading"
+  "key.skytrade.pause": "Pause / resume sandbox trading",
+  "key.skytrade.best_flip": "Type best AH flip into chat (you press Enter)"
 }

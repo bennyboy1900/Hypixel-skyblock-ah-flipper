@@ -47,7 +47,7 @@ Data lives in `.minecraft/config/skytrade/`:
 | Command | Action |
 | --- | --- |
 | `/skytrade` | Open the terminal (dashboard) |
-| `/skytrade bazaar`, `ah`, `portfolio`, `settings` | Open a specific page |
+| `/skytrade bazaar`, `ah`, `deals`, `portfolio`, `settings` | Open a specific page |
 | `/skytrade status` | API health, data age, portfolio, sandbox verdict in chat |
 | `/skytrade pause` / `resume` | Pause or resume sandbox trading (resume also clears emergency stop) |
 | `/skytrade resetpaper confirm` | Reset the paper/sandbox portfolio |
@@ -147,6 +147,76 @@ The engine also estimates time to sale. It rejects any listing without enough co
 every valuation comes with a line-by-line explanation.
 
 Only the cheapest listing in each identical group is evaluated, so a 40k-listing scan stays cheap.
+
+### Upgrade valuation
+Each upgrade kind has its own recovery rate. The configured base rate (55%) is multiplied by a weight
+per kind and capped at 95%. Gemstones, scrolls, pet items and master stars recover the most;
+potato books, reforge stones and gem-slot unlocks the least. Upgrades that are valued:
+- **every enchantment**, priced from bazaar books. A missing level is derived from the highest
+  priced lower level (2 books of level N make N+1), with a 20% haircut. Only books worth less than
+  5k are ignored (`strategy.minEnchantValue`), so cheap items (around 1M) are valued correctly too.
+- recombobulator, hot and fuming potato books, Art of War/Peace, master stars, ability scrolls,
+  power scrolls
+- gemstones, plus the coins and gems spent **unlocking gemstone slots** (from the items API)
+- Jalapeño Book, Wood Singularity, Transmission Tuners, Mana Disintegrators, Farming for Dummies,
+  Polarvoid, Etherwarp, Divan powder coating, Book of Stats, dyes, talisman enrichments, drill parts,
+  pet held items, and the stones of valuable reforges
+
+Exact comparables are also corrected for smaller upgrade differences the fingerprint does not
+cover.
+
+### Coflnet price data
+Hypixel only exposes the last ~60 seconds of sales, so without outside data the mod would need hours
+before it could value anything. The free Coflnet SkyBlock API fills the gap. Only item tags and pet
+rarity are sent.
+
+| Endpoint | Used for | Frequency |
+| --- | --- | --- |
+| `/api/prices/neu` | lowest BIN of every AH item, used to price upgrades not on the bazaar | 1 request every 10 min |
+| `/api/item/price/{tag}/history/week` | hourly 7-day history: confirms flips, catches pumps | best candidates of each scan, cached 30 min |
+| `/api/flip/bazaar/spread`, `/api/craft/profit`, `/api/kat/profit` | the **Deals** page | 3 requests every 5 min |
+
+- **One shared budget** (`external.maxRequestsPerMinute`, default 20). Coflnet blocks IPs that go
+  over its limit (HTTP 403 `"blocked"`). When that happens, every Coflnet request pauses for
+  30 minutes and `/skytrade status` shows `BLOCKED`.
+- **Valuation from day one (market fallback):** a listing without enough local sales is valued from
+  identical listings by other sellers (at least 2, the cheapest one undercut). The result is capped at
+  1.25× the 7-day median plus the item's upgrades, and at most the 7-day high. It needs at least 10
+  sales in 7 days. Confidence is capped at 60%, and discounts above 50% are still rejected. These
+  flips show `mkt` in the Comps column.
+- **Deals page** (`/skytrade deals`): Coflnet's lists are only leads, and every deal is re-checked
+  against the mod's own live data:
+  - **Bazaar spread:** flips Coflnet flags as manipulated are dropped. Entry and exit are
+    recomputed from the live order book after tax.
+  - **Crafts:** bazaar ingredients are re-priced at the live instant-buy price. The sale uses the
+    lower of Coflnet's price and its median, after AH fees.
+  - **Kat:** the pet's auction must still be active at that price in the mod's own AH scan.
+    Materials are re-priced from the bazaar.
+  - Deals that are no longer profitable disappear. *Type in chat* puts the command (`/bz`,
+    `/viewrecipe`, `/viewauction`) into your chat box; you press Enter.
+
+### Anti-manipulation
+- **Wash trading:** sales in which the listing's own seller was the seller or the buyer are ignored.
+  Repeated sales between the same two players count once, and each seller counts at most twice.
+  Seller concentration lowers confidence.
+- **7-day price history** (Coflnet SkyBlock API, only item tags and pet rarity are sent, at most 20
+  requests per minute, cached for 30 minutes). Every AH candidate passes `MarketGuard`:
+  - fewer than 10 sales in 7 days: rejected as illiquid
+  - 24h average above 1.35× the 7-day median: pump, fair value is scaled back to the median
+  - weekly trend below -15%: falling market, fair value is reduced
+  - clean local value above 1.5× the 7-day high: rejected as manipulated comparables
+  - discount above 50%: needs an exact match, confirmed history and a price not below half of the
+    week's lows, otherwise it is rejected as too good to be true (bait or a different item)
+- Without history a flip is shown as **(unconfirmed)**, gets lower confidence and no alert.
+- All thresholds are in `config.json` under `external`.
+
+### Manual assist
+- Flip alerts in chat have a **[VIEW]** button. Clicking it only types `/viewauction …` into your chat
+  box; you press Enter.
+- Keybind *Type best AH flip into chat* (Controls → SkyTrade, unbound by default) does the same for
+  the best confirmed flip.
+- The mod itself never sends a command, click or packet. Buying, listing and pricing stay your own
+  actions in the Hypixel menus.
 
 > Hypixel only exposes the last ~60 seconds of completed sales, so SkyTrade collects sales while it
 > runs and keeps them in SQLite. AH recommendations appear once enough comparable sales have been
@@ -279,6 +349,13 @@ dev.skytrade
 
 Cleanup runs every 6 hours. Defaults: 14 days of market data, 365 days of transactions, 7 days of
 errors. `/skytrade export` writes the analytics tables to CSV.
+
+## Benchmarks
+
+`docs/BENCHMARK_REPORT.md` has the results of the walk-forward backtests on recorded Hypixel data
+(AH valuation accuracy, AH flip simulation, bazaar replay on minute-level order books), the live
+forward test, the stress tests, and every bug they found. `benchmark/` contains the recorder and the
+report script; see the report for how to reproduce it.
 
 ## Development
 

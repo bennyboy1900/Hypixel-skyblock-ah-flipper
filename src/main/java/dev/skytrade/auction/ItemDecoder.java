@@ -14,6 +14,21 @@ import java.util.*;
  */
 public final class ItemDecoder {
     private static final String[] RARITIES = {"COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC", "DIVINE", "SPECIAL", "VERY_SPECIAL", "ULTIMATE", "ADMIN"};
+    /** Integer counters in ExtraAttributes that record applied, purchasable upgrades: NBT key -> item id. */
+    private static final Map<String, String> COUNTED_UPGRADES = Map.ofEntries(
+            Map.entry("wood_singularity_count", "WOOD_SINGULARITY"),
+            Map.entry("jalapeno_count", "JALAPENO_BOOK"),
+            Map.entry("mana_disintegrator_count", "MANA_DISINTEGRATOR"),
+            Map.entry("tuned_transmission", "TRANSMISSION_TUNER"),
+            Map.entry("farming_for_dummies_count", "FARMING_FOR_DUMMIES"),
+            Map.entry("polarvoid", "POLARVOID_BOOK"),
+            Map.entry("ethermerge", "ETHERWARP_CONDUIT"),
+            Map.entry("divan_powder_coating", "DIVAN_POWDER_COATING"),
+            Map.entry("art_of_peace_applied", "THE_ART_OF_PEACE"),
+            Map.entry("stats_book", "BOOK_OF_STATS"));
+    /** String fields in ExtraAttributes whose value is (or maps to) the id of an applied upgrade item. */
+    private static final List<String> NAMED_UPGRADES = List.of("power_ability_scroll", "dye_item",
+            "drill_part_engine", "drill_part_fuel_tank", "drill_part_upgrade_module");
     private final LruCache<String, Optional<ItemAttributes>> cache;
 
     public ItemDecoder(int cacheSize) {
@@ -73,8 +88,11 @@ public final class ItemDecoder {
         int masterStars = Math.max(0, Math.min(5, stars - 5));
 
         Map<String, String> gems = new TreeMap<>();
+        List<String> unlockedSlots = new ArrayList<>();
         Map<String, Object> gemTag = Nbt.compound(ea, "gems");
         if (gemTag != null) {
+            for (Object o : Nbt.list(gemTag, "unlocked_slots")) if (o instanceof String slot) unlockedSlots.add(slot);
+            Collections.sort(unlockedSlots);
             for (Map.Entry<String, Object> e : gemTag.entrySet()) {
                 String k = e.getKey();
                 if (k.endsWith("_gem") || k.equals("unlocked_slots")) continue;
@@ -126,10 +144,46 @@ public final class ItemDecoder {
             }
         }
 
+        Map<String, Integer> extras = new TreeMap<>();
+        for (Map.Entry<String, String> e : COUNTED_UPGRADES.entrySet()) {
+            int n = Nbt.integer(ea, e.getKey(), 0);
+            if (n > 0) extras.merge(e.getValue(), n, Integer::sum);
+        }
+        for (String key : NAMED_UPGRADES) {
+            String v = Nbt.string(ea, key, null);
+            if (v != null && !v.isBlank()) extras.merge(v.toUpperCase(Locale.ROOT), 1, Integer::sum);
+        }
+        String enrichment = Nbt.string(ea, "talisman_enrichment", null);
+        if (enrichment != null && !enrichment.isBlank()) {
+            extras.merge("TALISMAN_ENRICHMENT_" + enrichment.toUpperCase(Locale.ROOT), 1, Integer::sum);
+        }
+
         return new ItemAttributes(id, rarity, Nbt.string(ea, "modifier", null), Collections.unmodifiableMap(ench),
                 ultimate, ultimateLevel, recomb, dungeonStars, masterStars, Collections.unmodifiableMap(gems),
                 hot, fuming, List.copyOf(scrolls), Nbt.integer(ea, "art_of_war_count", 0) > 0, petType, petLevel,
-                petItem, candy, skin, Collections.unmodifiableMap(attrs), count, name);
+                petItem, candy, skin, Collections.unmodifiableMap(attrs), count, name,
+                Collections.unmodifiableMap(extras), List.copyOf(unlockedSlots), variant(id, ea, ench));
+    }
+
+    /**
+     * Identity qualifiers that make items with one id different products with very different prices.
+     * Returns null for ordinary items.
+     */
+    public static String variant(String id, Map<String, Object> ea, Map<String, Integer> ench) {
+        StringJoiner j = new StringJoiner(",");
+        if ("ENCHANTED_BOOK".equals(id) && !ench.isEmpty()) ench.forEach((k, v) -> j.add(k + v)); // the book IS its enchants
+        int cake = Nbt.integer(ea, "new_years_cake", -1);
+        if (cake >= 0) j.add("year" + cake);
+        Map<String, Object> runes = Nbt.compound(ea, "runes");
+        if (runes != null) new TreeMap<>(runes).forEach((k, v) -> j.add("rune_" + k.toLowerCase(Locale.ROOT) + (v instanceof Number n ? n.intValue() : 0)));
+        for (String key : List.of("party_hat_color", "party_hat_emoji", "potion", "potion_type")) {
+            String v = Nbt.string(ea, key, null);
+            if (v != null && !v.isBlank()) j.add(key + "=" + v.toLowerCase(Locale.ROOT));
+        }
+        int potionLevel = Nbt.integer(ea, "potion_level", 0);
+        if (potionLevel > 0) j.add("plvl" + potionLevel);
+        if (Nbt.integer(ea, "is_shiny", 0) > 0) j.add("shiny");
+        return j.length() == 0 ? null : j.toString();
     }
 
     /** The last lore line carries the rarity (e.g. "§6§lLEGENDARY SWORD"). */

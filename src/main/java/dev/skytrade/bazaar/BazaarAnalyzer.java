@@ -41,7 +41,7 @@ public final class BazaarAnalyzer {
         SkyTradeConfig.Risk risk = config.risk;
         if (!p.hasBook()) return null;
         double bestBid = p.bestBid(), bestAsk = p.bestAsk();
-        if (!(bestBid > 0) || !(bestAsk > bestBid)) return null;
+        if (!Stats.plausibleCoins(bestBid) || !Stats.plausibleCoins(bestAsk) || !(bestAsk > bestBid)) return null;
 
         double tick = BazaarFees.tick();
         double entry = round1(bestBid + tick);
@@ -60,6 +60,9 @@ public final class BazaarAnalyzer {
         double sellShare = OrderBook.captureShare(askCompetitors);
         double buyRate = sellsPerHour * buyShare;
         double sellRate = buysPerHour * sellShare;
+        // If even a single unit cannot be bought and sold within 3x the holding limit, there is no real flip
+        // here, however large the spread looks (typical for dead or baited books).
+        if (!(buyRate > 0) || !(sellRate > 0) || 1 / buyRate + 1 / sellRate > 3 * Math.max(0.5, risk.maxHoldingHours)) return null;
         double dailyVolume = Math.min(p.quick().sellMovingWeek(), p.quick().buyMovingWeek()) / 7.0;
 
         // Largest quantity whose emergency exit into the bids stays within the impact limit.
