@@ -22,6 +22,8 @@ public final class SkyTradeConfig {
     public Appearance appearance = new Appearance();
     public Notifications notifications = new Notifications();
     public Database database = new Database();
+    public External external = new External();
+    public Assist assist = new Assist();
 
     public enum TradingMode { LIVE_ANALYSIS, SANDBOX_AUTO }
 
@@ -43,6 +45,39 @@ public final class SkyTradeConfig {
         public boolean scanAuctions = true;
         public boolean downloadRecipes = true;
         public String recipeRepoUrl = "https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO/archive/refs/heads/master.zip";
+    }
+
+    /** External 7-day price history used to confirm valuations and catch manipulated prices. */
+    public static final class External {
+        public boolean enabled = true;
+        /** Coflnet SkyBlock API. Only item tags (and pet rarity) are sent. */
+        public String baseUrl = "https://sky.coflnet.com";
+        public int maxRequestsPerMinute = 20;
+        public int cacheMinutes = 30;
+        /** Without 7-day history an AH flip is shown as "unconfirmed", gets lower confidence and no alert. */
+        public boolean requireConfirmation = true;
+        /** Items with fewer sales than this in 7 days are rejected as illiquid. */
+        public int minWeeklySales = 10;
+        /** 24h average above this multiple of the 7-day median counts as a pump; fair value is scaled back. */
+        public double pumpRatio = 1.35;
+        /** Weekly trend below this (e.g. -15%) counts as a falling market; fair value is reduced. */
+        public double crashTrend = -0.15;
+        /** Clean local value above this multiple of the 7-day high is rejected as manipulated comparables. */
+        public double maxOverWeeklyHigh = 1.5;
+        /** Discounts above this need an exact match and confirmed history, or the listing is rejected. */
+        public double deepDiscount = 0.5;
+        /** How many top AH candidates per scan may request history. */
+        public int candidatesPerScan = 30;
+    }
+
+    /** Manual assist: everything is triggered by you; the mod never clicks or sends anything by itself. */
+    public static final class Assist {
+        /** Flip alerts in chat get a clickable [VIEW] that puts /viewauction into your chat box (you press Enter). */
+        public boolean clickableAlerts = true;
+        /** Minimum net profit for a chat flip alert. */
+        public double alertMinProfit = 500_000;
+        /** Alert only flips confirmed by 7-day history. */
+        public boolean alertOnlyConfirmed = true;
     }
 
     public static final class Risk {

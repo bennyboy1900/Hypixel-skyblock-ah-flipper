@@ -16,7 +16,9 @@ public final class Fingerprint {
     /** Enchants that materially change price regardless of level. */
     private static final Set<String> NOTABLE = Set.of("legion", "overload", "chimera", "soul_eater", "fatal_tempo",
             "wisdom", "last_stand", "bank", "combo", "inferno", "duplex", "one_for_all", "swarm", "rend", "habanero_tactics",
-            "flash", "refrigerate", "bobbin_time", "the_one");
+            "flash", "refrigerate", "bobbin_time", "the_one", "divine_gift", "pesterminator", "dedication", "tabasco",
+            "strong_mana", "ferocious_mana", "hardened_mana", "mana_vampire", "smoldering", "toxophilite", "green_thumb",
+            "ice_cold", "sunder", "prosecute", "cayenne");
     /** Enchant levels at/above which a regular enchant is considered a valuable book. */
     private static final int VALUABLE_LEVEL = 6;
 

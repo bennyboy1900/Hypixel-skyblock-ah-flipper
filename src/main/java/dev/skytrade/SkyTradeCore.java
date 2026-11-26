@@ -19,6 +19,7 @@ import dev.skytrade.database.CsvExporter;
 import dev.skytrade.database.Database;
 import dev.skytrade.database.Repository;
 import dev.skytrade.execution.Trade;
+import dev.skytrade.external.ExternalPriceService;
 import dev.skytrade.execution.TradeEngine;
 import dev.skytrade.execution.sandbox.AutoTrader;
 import dev.skytrade.execution.sandbox.EnvironmentProbe;
@@ -87,6 +88,7 @@ public final class SkyTradeCore implements AutoCloseable {
     private final ApiStatus apiStatus = new ApiStatus();
     private final HypixelApiClient api;
     private final MarketDataService market;
+    private final ExternalPriceService external;
     private final RecipeRepository recipes = new RecipeRepository();
     private final NotificationService notifications;
     private final PortfolioService portfolio;
@@ -116,6 +118,7 @@ public final class SkyTradeCore implements AutoCloseable {
         this.api = new HypixelApiClient(() -> config().api, apiStatus, time, tasks.computeExecutor());
         this.market = new MarketDataService(api, this::config, time, new ItemDecoder(120_000), new SalesHistory(200, 20_000),
                 new MarketHistory(288, config().database.historyIntervalSeconds * 1000L));
+        this.external = new ExternalPriceService(() -> config().external, time);
         this.notifications = new NotificationService(this::config, time);
         this.portfolio = new PortfolioService(config().sandbox.startingCapital);
         this.simulator = new MarketSimulator(time, config().sandbox.rngSeed, config().sandbox.failureRate, o -> repo.saveSimOrder(o));
@@ -189,6 +192,7 @@ public final class SkyTradeCore implements AutoCloseable {
             publishPortfolio();
         })));
         schedules.add(tasks.every("trader.decide", 20_000, Math.max(10, config().sandbox.decisionIntervalSeconds) * 1000L, () -> onTrader(this::decide)));
+        schedules.add(tasks.every("external.history", 8_000, 3_000, external::drain));
         schedules.add(tasks.every("craft.analysis", 30_000, 120_000, this::analyzeCrafts));
         schedules.add(tasks.every("db.cleanup", 60_000, 6 * 3_600_000L, () -> repo.cleanup(config().database, time.now())));
         schedules.add(tasks.every("memory.prune", 300_000, 3_600_000L, () -> onTrader(() -> {
@@ -244,10 +248,10 @@ public final class SkyTradeCore implements AutoCloseable {
         long t0 = time.now();
         AuctionIndex idx = AuctionIndex.build(snap, market.decoder());
         auctionIndex = idx;
-        FairValueEstimator est = new FairValueEstimator(market.sales(), this::componentPrice);
+        FairValueEstimator est = new FairValueEstimator(market.sales(), this::componentPrice, market.catalog());
         double maxCap = portfolio.view().totalValue() > 0 ? portfolio.view().totalValue() * config().risk.maxCapitalPerTradePct
                 : config().sandbox.startingCapital * config().risk.maxCapitalPerTradePct;
-        List<AuctionOpportunity> opps = new AuctionAnalyzer(config()).analyze(idx, est, maxCap, time.now());
+        List<AuctionOpportunity> opps = new AuctionAnalyzer(config(), external, market.catalog()).analyze(idx, est, maxCap, time.now());
         for (int i = 0; i < Math.min(20, opps.size()); i++) {
             AuctionOpportunity o = opps.get(i);
             repo.saveValuation(time.now(), o.uuid(), o.itemId(), o.listingPrice(), o.valuation());
@@ -448,6 +452,7 @@ public final class SkyTradeCore implements AutoCloseable {
     public SkyTradeConfig config() { return configManager.get(); }
     public ConfigManager configManager() { return configManager; }
     public MarketDataService market() { return market; }
+    public ExternalPriceService external() { return external; }
     public Results results() { return results; }
     public AuctionIndex auctionIndex() { return auctionIndex; }
     public PortfolioView portfolio() { return portfolio.view(); }

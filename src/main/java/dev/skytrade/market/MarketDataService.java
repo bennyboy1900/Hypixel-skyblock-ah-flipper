@@ -231,9 +231,11 @@ public final class MarketDataService {
                 if (a.isEmpty() || a.get().count() != 1) continue;
                 ItemAttributes at = a.get();
                 List<String> ups = new ArrayList<>();
-                for (UpgradeComponent c : UpgradeValuer.components(at)) ups.add(c.encode());
+                for (UpgradeComponent c : UpgradeValuer.components(at, catalog())) ups.add(c.encode());
+                ups.add(SaleRecord.FULL_UPGRADES);
                 SaleRecord s = new SaleRecord(e.uuid(), e.timestamp(), e.price(), e.bin(), at.skyblockId(),
-                        Fingerprint.base(at), Fingerprint.relaxed(at), Fingerprint.strict(at), List.copyOf(ups));
+                        Fingerprint.base(at), Fingerprint.relaxed(at), Fingerprint.strict(at), List.copyOf(ups),
+                        e.seller(), e.buyer());
                 if (sales.add(s)) fresh.add(s);
             }
             if (!fresh.isEmpty()) {

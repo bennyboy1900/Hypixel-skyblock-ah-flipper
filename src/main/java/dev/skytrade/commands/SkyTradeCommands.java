@@ -80,6 +80,7 @@ public final class SkyTradeCommands {
             msg(c, "  " + e.name().toLowerCase() + ": " + age + (s.consecutiveFailures > 0 ? ", failing: " + s.lastError : ""),
                     s.consecutiveFailures > 0 ? Formatting.RED : Formatting.GRAY);
         }
+        msg(c, "  7-day price history: " + core.external().status(), Formatting.GRAY);
         var pv = core.portfolio();
         msg(c, "Paper portfolio " + Fmt.coins(pv.totalValue()) + " (cash " + Fmt.coins(pv.cash()) + ", today " + Fmt.signedCoins(pv.dailyProfit())
                 + ", " + pv.activeTrades().size() + " active)", Formatting.WHITE);

@@ -16,7 +16,7 @@ public final class Database implements AutoCloseable {
         T run(Connection c) throws SQLException;
     }
 
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
     private final ExecutorService thread = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "SkyTrade-DB");
         t.setDaemon(true);
@@ -106,9 +106,23 @@ public final class Database implements AutoCloseable {
                 s.execute("""
                         CREATE TABLE IF NOT EXISTS error_log (
                           id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, level TEXT, event TEXT, message TEXT)""");
+            }
+            if (version < 2) {
+                // v2: seller/buyer on sales (wash-trade filtering).
+                if (!hasColumn(s, "auction_sales", "seller")) s.execute("ALTER TABLE auction_sales ADD COLUMN seller TEXT");
+                if (!hasColumn(s, "auction_sales", "buyer")) s.execute("ALTER TABLE auction_sales ADD COLUMN buyer TEXT");
+            }
+            if (version < SCHEMA_VERSION) {
                 s.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema', '" + SCHEMA_VERSION + "')");
             }
         }
+    }
+
+    private static boolean hasColumn(Statement s, String table, String column) throws SQLException {
+        try (ResultSet rs = s.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) if (column.equalsIgnoreCase(rs.getString("name"))) return true;
+        }
+        return false;
     }
 
     /** Runs work on the database thread and waits for it (use only from background threads). */

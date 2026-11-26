@@ -129,7 +129,7 @@ public final class Repository implements TradeStore {
     public void saveSales(List<SaleRecord> sales) {
         if (sales.isEmpty()) return;
         db.submit(c -> Database.tx(c, cc -> {
-            try (PreparedStatement ps = cc.prepareStatement("INSERT OR IGNORE INTO auction_sales VALUES (?,?,?,?,?,?,?,?,?)")) {
+            try (PreparedStatement ps = cc.prepareStatement("INSERT OR IGNORE INTO auction_sales(uuid,ts,price,bin,item_id,base_fp,relaxed_fp,strict_fp,upgrades,seller,buyer) VALUES (?,?,?,?,?,?,?,?,?,?,?)")) {
                 for (SaleRecord s : sales) {
                     ps.setString(1, s.uuid());
                     ps.setLong(2, s.timestamp());
@@ -140,6 +140,8 @@ public final class Repository implements TradeStore {
                     ps.setString(7, s.relaxed());
                     ps.setString(8, s.strict());
                     ps.setString(9, String.join(",", s.upgrades()));
+                    ps.setString(10, s.seller());
+                    ps.setString(11, s.buyer());
                     ps.addBatch();
                 }
                 ps.executeBatch();
@@ -151,14 +153,14 @@ public final class Repository implements TradeStore {
     public List<SaleRecord> loadSales(long since) {
         List<SaleRecord> r = db.call(c -> {
             List<SaleRecord> out = new ArrayList<>();
-            try (PreparedStatement ps = c.prepareStatement("SELECT * FROM auction_sales WHERE ts >= ? ORDER BY ts")) {
+            try (PreparedStatement ps = c.prepareStatement("SELECT uuid,ts,price,bin,item_id,base_fp,relaxed_fp,strict_fp,upgrades,seller,buyer FROM auction_sales WHERE ts >= ? ORDER BY ts")) {
                 ps.setLong(1, since);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         String up = rs.getString(9);
                         List<String> ups = up == null || up.isEmpty() ? List.of() : List.of(up.split(","));
                         out.add(new SaleRecord(rs.getString(1), rs.getLong(2), rs.getLong(3), rs.getInt(4) == 1, rs.getString(5),
-                                rs.getString(6), rs.getString(7), rs.getString(8), ups));
+                                rs.getString(6), rs.getString(7), rs.getString(8), ups, rs.getString(10), rs.getString(11)));
                     }
                 }
             }

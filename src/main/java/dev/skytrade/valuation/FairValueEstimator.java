@@ -2,12 +2,11 @@ package dev.skytrade.valuation;
 
 import dev.skytrade.auction.Fingerprint;
 import dev.skytrade.auction.ItemAttributes;
+import dev.skytrade.market.ItemCatalog;
 import dev.skytrade.util.Fmt;
 import dev.skytrade.util.Stats;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 /**
  * Estimates the fair market value of an auction item from comparable completed sales.
@@ -21,29 +20,48 @@ import java.util.Locale;
  *   <li>The fair value is capped by current BIN competition (we must undercut cheaper identical listings).</li>
  *   <li>If fewer than {@code minComparables} remain, the valuation is rejected.</li>
  * </ol>
+ *
+ * <p>Before any of that, comparables are cleaned of manipulation (see {@link #filterWashTrades}): sales in
+ * which the listing's own seller took part are dropped, each seller/buyer pair counts once and each seller
+ * at most twice, so a few accounts trading an item back and forth cannot set its price.</p>
  */
 public final class FairValueEstimator {
     public record Params(int minComparables, double recoveryRate, double undercut, long lookbackMs, long halfLifeMs) {}
 
+    /** Max comparable sales any single seller may contribute. */
+    static final int MAX_PER_SELLER = 2;
+
     private final SalesHistory history;
     private final PriceSource prices;
+    private final ItemCatalog catalog;
 
     public FairValueEstimator(SalesHistory history, PriceSource prices) {
+        this(history, prices, ItemCatalog.EMPTY);
+    }
+
+    public FairValueEstimator(SalesHistory history, PriceSource prices, ItemCatalog catalog) {
         this.history = history;
         this.prices = prices;
+        this.catalog = catalog == null ? ItemCatalog.EMPTY : catalog;
+    }
+
+    public Valuation estimate(ItemAttributes item, List<Long> competingBins, Params p, long now) {
+        return estimate(item, competingBins, p, now, null);
     }
 
     /**
      * @param competingBins prices of other active BIN listings with the same strict fingerprint (any order)
+     * @param listingSeller UUID of the player selling the evaluated listing (null if unknown); sales they took
+     *                      part in are never used as comparables
      */
-    public Valuation estimate(ItemAttributes item, List<Long> competingBins, Params p, long now) {
+    public Valuation estimate(ItemAttributes item, List<Long> competingBins, Params p, long now, String listingSeller) {
         List<String> why = new ArrayList<>();
         String strict = Fingerprint.strict(item);
         String relaxed = Fingerprint.relaxed(item);
         why.add("Item: " + item.skyblockId() + " [" + item.rarity() + "]" + (item.isPet() ? " lvl " + item.petLevel() : ""));
 
-        List<SaleRecord> exact = recent(history.strict(strict), now, p.lookbackMs());
-        List<UpgradeComponent> ownUpgrades = UpgradeValuer.components(item);
+        List<SaleRecord> exact = filterWashTrades(recent(history.strict(strict), now, p.lookbackMs()), listingSeller, why, "exact");
+        List<UpgradeComponent> ownUpgrades = UpgradeValuer.components(item, catalog);
         UpgradeValuer.Result own = UpgradeValuer.value(ownUpgrades, prices, p.recoveryRate());
 
         String level;
@@ -55,10 +73,23 @@ public final class FairValueEstimator {
             level = "EXACT";
             used = exact;
             values = new double[used.size()];
-            for (int i = 0; i < used.size(); i++) values[i] = used.get(i).price();
-            why.add("Found " + used.size() + " exact comparable sales (same upgrades).");
+            int adjusted = 0;
+            for (int i = 0; i < used.size(); i++) {
+                SaleRecord s = used.get(i);
+                values[i] = s.price();
+                // Exact matches share the value-dominant upgrades, but can still differ in smaller ones
+                // (cheaper enchants, extra books, slot unlocks). Correct for that when the record is complete.
+                if (!s.fullUpgrades()) continue;
+                double diff = own.value() - UpgradeValuer.value(decode(s.upgrades()), prices, p.recoveryRate()).value();
+                if (Math.abs(diff) > 1 && Math.abs(diff) <= s.price() * 0.5) {
+                    values[i] = s.price() + diff;
+                    adjusted++;
+                }
+            }
+            why.add("Found " + used.size() + " exact comparable sales (same upgrades)"
+                    + (adjusted > 0 ? "; " + adjusted + " adjusted for smaller upgrade differences." : "."));
         } else {
-            List<SaleRecord> rel = recent(history.relaxed(relaxed), now, p.lookbackMs());
+            List<SaleRecord> rel = filterWashTrades(recent(history.relaxed(relaxed), now, p.lookbackMs()), listingSeller, why, "similar");
             if (rel.size() < p.minComparables()) {
                 why.add("Only " + exact.size() + " exact and " + rel.size() + " similar sales in lookback window; need " + p.minComparables() + ".");
                 return Valuation.reject("insufficient comparables", why);
@@ -68,9 +99,7 @@ public final class FairValueEstimator {
             values = new double[used.size()];
             for (int i = 0; i < used.size(); i++) {
                 SaleRecord s = used.get(i);
-                List<UpgradeComponent> comps = new ArrayList<>();
-                for (String u : s.upgrades()) comps.add(UpgradeComponent.decode(u));
-                double credit = UpgradeValuer.value(comps, prices, p.recoveryRate()).value();
+                double credit = UpgradeValuer.value(decode(s.upgrades()), prices, p.recoveryRate()).value();
                 values[i] = Math.max(s.price() * 0.25, s.price() - credit); // never strip more than 75%
             }
             upgradeCredit = own.value();
@@ -146,11 +175,74 @@ public final class FairValueEstimator {
         double upgradeShare = fair > 0 ? upgradeCredit / fair : 0;
         conf *= 1 - Stats.clamp(upgradeShare * 0.6, 0, 0.5);  // reliance on upgrade estimates
         if (own.unpriced() > 0 && level.equals("SIMILAR")) conf *= 0.85;
+        double topSellerShare = topSellerShare(used);
+        if (topSellerShare > 0.4 && used.size() >= 3) {
+            conf *= 1 - Stats.clamp(topSellerShare - 0.4, 0, 0.4);
+            why.add("Warning: one seller made " + Fmt.pct(topSellerShare) + " of the comparable sales (thin, concentrated market).");
+        }
         conf = Stats.clamp(conf, 0, 1);
         why.add("Confidence " + Fmt.score(conf) + "/100.");
 
         return new Valuation(true, "", fair, salePrice, conf, kv.length, level, salesPerDay, saleHours, dispersion,
                 upgradeCredit, why, keptRaw);
+    }
+
+    private static List<UpgradeComponent> decode(List<String> encoded) {
+        List<UpgradeComponent> comps = new ArrayList<>(encoded.size());
+        for (String u : encoded) if (!u.startsWith("~")) comps.add(UpgradeComponent.decode(u));
+        return comps;
+    }
+
+    /**
+     * Removes comparables that look like wash trades or self-dealing:
+     * <ul>
+     *   <li>any sale in which the evaluated listing's seller was the seller or the buyer,</li>
+     *   <li>repeated sales between the same seller and buyer (only the first counts),</li>
+     *   <li>more than {@link #MAX_PER_SELLER} sales by one seller (the most recent ones are kept).</li>
+     * </ul>
+     * Sales without seller/buyer data (older records) pass unchanged.
+     */
+    static List<SaleRecord> filterWashTrades(List<SaleRecord> sales, String listingSeller, List<String> why, String label) {
+        if (sales.isEmpty()) return sales;
+        List<SaleRecord> sorted = new ArrayList<>(sales);
+        sorted.sort(Comparator.comparingLong(SaleRecord::timestamp).reversed());
+        Set<String> pairs = new HashSet<>();
+        Map<String, Integer> perSeller = new HashMap<>();
+        List<SaleRecord> out = new ArrayList<>(sorted.size());
+        int self = 0, repeat = 0, capped = 0;
+        for (SaleRecord s : sorted) {
+            if (listingSeller != null && (listingSeller.equals(s.seller()) || listingSeller.equals(s.buyer()))) {
+                self++;
+                continue;
+            }
+            if (s.seller() != null && s.buyer() != null && !pairs.add(s.seller() + ">" + s.buyer())) {
+                repeat++;
+                continue;
+            }
+            if (s.seller() != null && perSeller.merge(s.seller(), 1, Integer::sum) > MAX_PER_SELLER) {
+                capped++;
+                continue;
+            }
+            out.add(s);
+        }
+        if (self > 0) why.add("Ignored " + self + " " + label + " sale(s) involving this listing's seller (possible self-pumping).");
+        if (repeat > 0) why.add("Ignored " + repeat + " repeated " + label + " sale(s) between the same two players (wash trading).");
+        if (capped > 0) why.add("Ignored " + capped + " " + label + " sale(s) beyond " + MAX_PER_SELLER + " per seller.");
+        return out;
+    }
+
+    private static double topSellerShare(List<SaleRecord> sales) {
+        Map<String, Integer> n = new HashMap<>();
+        int known = 0;
+        for (SaleRecord s : sales) {
+            if (s.seller() == null) continue;
+            known++;
+            n.merge(s.seller(), 1, Integer::sum);
+        }
+        if (known == 0) return 0;
+        int max = 0;
+        for (int v : n.values()) max = Math.max(max, v);
+        return (double) max / known;
     }
 
     private static List<SaleRecord> recent(List<SaleRecord> list, long now, long lookback) {

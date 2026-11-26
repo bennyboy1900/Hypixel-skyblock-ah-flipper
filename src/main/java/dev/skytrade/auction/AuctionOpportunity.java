@@ -9,7 +9,16 @@ import java.util.List;
 public record AuctionOpportunity(String uuid, String itemId, String name, ItemAttributes attrs, long listingPrice,
                                  Valuation valuation, double grossProfit, double netProfit, double fees,
                                  double risk, double confidence, double liquidity, List<String> upgrades,
-                                 List<String> explanation) implements Opportunity {
+                                 List<String> explanation, boolean historyConfirmed, String seller) implements Opportunity {
+    public AuctionOpportunity(String uuid, String itemId, String name, ItemAttributes attrs, long listingPrice,
+                              Valuation valuation, double grossProfit, double netProfit, double fees, double risk,
+                              double confidence, double liquidity, List<String> upgrades, List<String> explanation) {
+        this(uuid, itemId, name, attrs, listingPrice, valuation, grossProfit, netProfit, fees, risk, confidence, liquidity,
+                upgrades, explanation, true, null);
+    }
+
+    /** Flips not confirmed by external price history are shown but never pushed as alerts. */
+    @Override public boolean confirmed() { return historyConfirmed; }
     @Override public Kind kind() { return Kind.AUCTION_FLIP; }
     @Override public String key() { return "AH:" + uuid; }
     @Override public double entryPrice() { return listingPrice; }

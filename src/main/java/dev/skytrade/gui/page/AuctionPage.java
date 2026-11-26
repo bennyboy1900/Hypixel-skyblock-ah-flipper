@@ -24,7 +24,7 @@ public final class AuctionPage extends Page {
 
     public AuctionPage(SkyTradeScreen screen) {
         super(screen);
-        table.column(new Table.Column<AuctionOpportunity>("Item", 100, 3f, LEFT, AuctionOpportunity::name, o -> Theme.TEXT,
+        table.column(new Table.Column<AuctionOpportunity>("Item", 100, 3f, LEFT, o -> o.confirmed() ? o.name() : o.name() + " (unconfirmed)", o -> o.confirmed() ? Theme.TEXT : Theme.YELLOW,
                         Comparator.comparing(AuctionOpportunity::name)).icon(o -> ItemIcons.forId(o.itemId(), core().market().catalog())))
                 .column(new Table.Column<AuctionOpportunity>("Price", 46, 1f, RIGHT, o -> Fmt.coins(o.listingPrice()), null, Comparator.comparingLong(AuctionOpportunity::listingPrice)).priority(8))
                 .column(new Table.Column<AuctionOpportunity>("Fair value", 50, 1f, RIGHT, o -> Fmt.coins(o.valuation().fairValue()), null, Comparator.comparingDouble(o -> o.valuation().fairValue())).priority(7))
