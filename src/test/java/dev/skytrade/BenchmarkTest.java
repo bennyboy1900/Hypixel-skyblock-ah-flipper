@@ -238,7 +238,9 @@ class BenchmarkTest {
             System.out.println("variant " + v.name() + ": " + preds.size() + " valued");
         }
         results.put("variants", perVariant);
-        results.put("flips", simulateAuctionFlips(sales, books, cat, lbin));
+        results.put("flips", simulateAuctionFlips(sales, books, cat, lbin, new SkyTradeConfig().strategy.ahNoiseMargin));
+        // Same simulation without the noise rule, to measure what it changes.
+        results.put("flipsWithoutNoiseRule", simulateAuctionFlips(sales, books, cat, lbin, 0));
         write("ah_walkforward", results);
     }
 
@@ -255,7 +257,8 @@ class BenchmarkTest {
      *   <li>no identical sale until the data ends: unsold (capital stuck, reported separately).</li>
      * </ul>
      */
-    static List<FlipOutcome> simulateAuctionFlips(List<Sale> sales, List<BazaarSnapshot> books, ItemCatalog cat, Map<String, Double> lbin) {
+    static List<FlipOutcome> simulateAuctionFlips(List<Sale> sales, List<BazaarSnapshot> books, ItemCatalog cat, Map<String, Double> lbin,
+                                                  double noiseMargin) {
         SkyTradeConfig cfg = new SkyTradeConfig();
         SalesHistory h = new SalesHistory(400, 50_000);
         Map<String, List<Sale>> byStrict = new HashMap<>();
@@ -267,14 +270,22 @@ class BenchmarkTest {
             if (s.bin()) {
                 var p = new FairValueEstimator.Params((int) cfg.strategy.ahMinComparables, cfg.strategy.upgradeRecoveryRate,
                         cfg.strategy.ahUndercut, 7 * 86_400_000L, 2 * 86_400_000L, cfg.strategy.minEnchantValue);
-                Valuation v = new FairValueEstimator(h, prices, cat).estimate(s.attrs(), List.of(), p, s.ts() - 1, s.seller());
+                // Live, the bot sees the cheapest identical BIN listings and caps its resale price there. Identical
+                // items that sold in the next 15 minutes were already listed at this moment, so they stand in
+                // for those competing listings (this can only lower the bot's resale price).
+                List<Long> competing = new ArrayList<>();
+                for (Sale o : byStrict.getOrDefault(Fingerprint.strict(s.attrs()), List.of())) {
+                    if (o.ts() > s.ts() && o.ts() <= s.ts() + 15 * 60_000L && !o.uuid().equals(s.uuid())) competing.add(o.price());
+                }
+                Valuation v = new FairValueEstimator(h, prices, cat).estimate(s.attrs(), competing, p, s.ts() - 1, s.seller());
                 if (v.valid()) {
                     double sale = v.salePrice();
                     double fees = AuctionFees.listingFee(sale, cfg.fees) + AuctionFees.claimTax(sale, cfg.fees);
                     double net = sale - fees - s.price();
                     double roi = net / s.price();
                     if (net >= cfg.risk.minNetProfit && roi >= cfg.risk.minRoi && v.confidence() >= cfg.risk.minConfidence
-                            && v.saleHours() <= cfg.strategy.ahMaxSaleHours) {
+                            && v.saleHours() <= cfg.strategy.ahMaxSaleHours
+                            && dev.skytrade.auction.AuctionAnalyzer.clearsNoise(net, sale, v.volatility(), noiseMargin)) {
                         List<Sale> later = new ArrayList<>();
                         for (Sale o : byStrict.getOrDefault(Fingerprint.strict(s.attrs()), List.of())) {
                             if (o.ts() > s.ts() && !o.uuid().equals(s.uuid())) later.add(o);

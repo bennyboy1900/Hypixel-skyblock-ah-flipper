@@ -147,6 +147,18 @@ public final class AuctionAnalyzer {
                 0, why, List.copyOf(shown));
     }
 
+    /**
+     * A flip must earn more than the item's normal price noise: the net margin (net / sale price) has to be at
+     * least {@code k} times the robust price dispersion of the comparables. Walk-forward backtest on recorded
+     * Hypixel sales: flips inside the noise band (e.g. a God Potion bought 5% under a median it wobbles 10%
+     * around) mostly had to be resold below the purchase price.
+     */
+    public static boolean clearsNoise(double net, double sale, double dispersion, double k) {
+        if (!(sale > 0) || !(net > 0)) return false;
+        double d = Double.isFinite(dispersion) ? Math.max(0, dispersion) : 1;
+        return net / sale >= k * d;
+    }
+
     AuctionOpportunity evaluate(DecodedAuction d, List<Long> competing, FairValueEstimator estimator,
                                 FairValueEstimator.Params params, long now) {
         Valuation v = estimator.estimate(d.attrs(), competing, params, now, d.auction().auctioneer());
@@ -176,6 +188,7 @@ public final class AuctionAnalyzer {
         double net = sale - fees - price;
         if (net <= 0) return null;
         if (v.saleHours() > config.strategy.ahMaxSaleHours) return null;
+        if (!clearsNoise(net, sale, v.volatility(), config.strategy.ahNoiseMargin)) return null;
 
         double discount = v.fairValue() > 0 ? 1 - price / v.fairValue() : 0;
         List<String> why = new ArrayList<>(v.explanation());

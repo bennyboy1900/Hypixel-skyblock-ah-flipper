@@ -137,6 +137,8 @@ public final class SkyTradeConfig {
         public double ahMinComparables = 5;
         public double ahMaxSaleHours = 48;
         public double ahUndercut = 0.01;
+        /** An AH flip's net margin must be at least this multiple of the item's price dispersion. */
+        public double ahNoiseMargin = 1.0;
         public double upgradeRecoveryRate = 0.55;
         /** Enchant books cheaper than this are ignored when valuing an item (all others are counted). */
         public double minEnchantValue = 5_000;

@@ -154,6 +154,8 @@ def main():
         out["ahData"] = {"sales": ah["sales"], "bins": ah["bins"], "spanHours": round(ah["spanHours"], 2), "items": ah["items"]}
         out["ahVariants"] = {v["variant"]: valuation_metrics(v["predictions"], ah["bins"]) for v in ah["variants"]}
         out["ahFlips"] = flip_metrics(ah["flips"])
+        if "flipsWithoutNoiseRule" in ah:
+            out["ahFlipsWithoutNoiseRule"] = flip_metrics(ah["flipsWithoutNoiseRule"])
     bz_path = os.path.join(bench, "bazaar_replay.json")
     if os.path.exists(bz_path):
         out["bazaarReplay"] = bazaar_metrics(json.load(open(bz_path)))
