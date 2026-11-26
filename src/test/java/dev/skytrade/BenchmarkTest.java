@@ -189,7 +189,7 @@ class BenchmarkTest {
     record Prediction(String uuid, String item, long ts, long actual, double fair, double sale, double conf, String level,
                       boolean bin, int comps) {}
 
-    record Variant(String name, double recovery, double minEnchant, boolean washFilter) {}
+    record Variant(String name, double recovery, double minEnchant, boolean washFilter, int maxPerPair) {}
 
     @Test
     void auctionHouseWalkForward() throws Exception {
@@ -198,11 +198,12 @@ class BenchmarkTest {
         ItemCatalog cat = catalog();
         Map<String, Double> lbin = lowestBins();
         List<Variant> variants = List.of(
-                new Variant("default (55% recovery, enchants >= 5k)", 0.55, 5_000, true),
-                new Variant("old threshold (enchants >= 150k)", 0.55, 150_000, true),
-                new Variant("upgrades ignored (0% recovery)", 0.0, 5_000, true),
-                new Variant("full upgrade cost (95% recovery)", 0.95 / 1.6, 5_000, true),
-                new Variant("no wash-trade filter", 0.55, 5_000, false));
+                new Variant("default (55% recovery, enchants >= 5k, pair cap 3)", 0.55, 5_000, true, 3),
+                new Variant("old enchant threshold (>= 150k)", 0.55, 150_000, true, 3),
+                new Variant("upgrades ignored (0% recovery)", 0.0, 5_000, true, 3),
+                new Variant("full upgrade cost (95% recovery)", 0.95 / 1.6, 5_000, true, 3),
+                new Variant("strict wash filter (pair cap 1)", 0.55, 5_000, true, 1),
+                new Variant("no wash-trade filter", 0.55, 5_000, false, 0));
         Map<String, Object> results = new LinkedHashMap<>();
         results.put("sales", sales.size());
         results.put("bins", sales.stream().filter(Sale::bin).count());
@@ -218,7 +219,7 @@ class BenchmarkTest {
                 long bucket = s.ts() / 600_000L;
                 PriceSource prices = priceCache.computeIfAbsent(bucket, b -> pricesAt(books, s.ts(), lbin));
                 FairValueEstimator est = new FairValueEstimator(h, prices, cat);
-                var p = new FairValueEstimator.Params(5, v.recovery(), 0.01, 7 * 86_400_000L, 2 * 86_400_000L, v.minEnchant());
+                var p = new FairValueEstimator.Params(5, v.recovery(), 0.01, 7 * 86_400_000L, 2 * 86_400_000L, v.minEnchant(), v.maxPerPair());
                 Valuation val = est.estimate(s.attrs(), List.of(), p, s.ts() - 1, v.washFilter() ? s.seller() : null);
                 if (val.valid()) {
                     preds.add(new Prediction(s.uuid(), s.attrs().skyblockId(), s.ts(), s.price(), val.fairValue(), val.salePrice(),

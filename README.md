@@ -350,6 +350,13 @@ dev.skytrade
 Cleanup runs every 6 hours. Defaults: 14 days of market data, 365 days of transactions, 7 days of
 errors. `/skytrade export` writes the analytics tables to CSV.
 
+## Benchmarks
+
+`docs/BENCHMARK_REPORT.md` has the results of the walk-forward backtests on recorded Hypixel data
+(AH valuation accuracy, AH flip simulation, bazaar replay on minute-level order books), the live
+forward test, the stress tests, and every bug they found. `benchmark/` contains the recorder and the
+report script; see the report for how to reproduce it.
+
 ## Development
 
 ```bash

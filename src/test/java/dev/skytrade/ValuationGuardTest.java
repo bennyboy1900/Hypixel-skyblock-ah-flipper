@@ -147,9 +147,11 @@ class ValuationGuardTest {
         assertTrue(v.valid(), String.join("\n", v.explanation()));
         assertTrue(v.fairValue() < 1_100_000, "pumped sales must not set the price: " + v.fairValue());
 
-        // Sales the listing's own seller took part in never count.
-        Valuation self = new FairValueEstimator(h, id -> Double.NaN).estimate(a, List.of(), params, now, "seller0");
-        assertTrue(self.explanation().stream().anyMatch(l -> l.contains("this listing's seller")), self.explanation().toString());
+        // Sales the listing's own seller bought never count; their own sales to other players do.
+        Valuation self = new FairValueEstimator(h, id -> Double.NaN).estimate(a, List.of(), params, now, "buyer0");
+        assertTrue(self.explanation().stream().anyMatch(l -> l.contains("bought by this listing's seller")), self.explanation().toString());
+        Valuation bulk = new FairValueEstimator(h, id -> Double.NaN).estimate(a, List.of(), params, now, "seller0");
+        assertTrue(bulk.explanation().stream().noneMatch(l -> l.contains("this listing's seller")), bulk.explanation().toString());
     }
 
     @Test
