@@ -10,7 +10,9 @@ import dev.skytrade.config.SkyTradeConfig;
 import dev.skytrade.market.BazaarProduct;
 import dev.skytrade.market.BazaarSnapshot;
 import dev.skytrade.market.ItemCatalog;
+import dev.skytrade.bazaar.OrderBook;
 import dev.skytrade.util.Fmt;
+import dev.skytrade.util.Stats;
 import dev.skytrade.util.TimeSource;
 
 import java.util.*;
@@ -104,13 +106,20 @@ public final class DealsService {
             if (f == null) continue;
             String tag = str(f, "itemTag");
             BazaarProduct p = tag == null ? null : bz.get(tag);
-            if (p == null || p.bestBid() <= 0 || p.bestAsk() <= 0) continue;
+            if (p == null || !Stats.plausibleCoins(p.bestBid()) || !Stats.plausibleCoins(p.bestAsk())) continue;
             double entry = p.bestBid() + 0.1, exit = p.bestAsk() - 0.1;
             double net = exit * (1 - cfg.fees.bazaarTax) - entry;
             if (net <= 0) continue;
+            // Spreads above 100% are dead or baited books (forward test: "+3850%" flips with 1-4 sales a week).
+            if ((p.bestAsk() - p.bestBid()) / p.bestBid() > 1.0) continue;
             double vol = num(f, "volume");
-            // Coflnet estimates fill times in seconds for both legs.
-            double hours = (num(f, "estimatedBuyFillSeconds") + num(f, "estimatedSellFillSeconds")) / 3600.0;
+            // Fill time for one unit from live flow and competition, and Coflnet's own estimate; the slower wins.
+            double buyRate = p.instantSellsPerHour() * OrderBook.captureShare(OrderBook.competitorsNear(p.bids(), 0.005));
+            double sellRate = p.instantBuysPerHour() * OrderBook.captureShare(OrderBook.competitorsNear(p.asks(), 0.005));
+            if (!(buyRate > 0) || !(sellRate > 0)) continue;
+            double hours = Math.max(1 / buyRate + 1 / sellRate,
+                    (num(f, "estimatedBuyFillSeconds") + num(f, "estimatedSellFillSeconds")) / 3600.0);
+            if (hours > 3 * Math.max(0.5, cfg.risk.maxHoldingHours)) continue;
             List<String> why = new ArrayList<>();
             why.add("Coflnet bazaar spread flip, not flagged as manipulated.");
             why.add("Live order book: buy order at " + Fmt.coins(entry) + ", sell offer at " + Fmt.coins(exit)
@@ -173,9 +182,12 @@ public final class DealsService {
                         + " and median " + Fmt.coins(median) + "), after fees.";
             }
             double vol = num(o, "volume");
-            if (vol < 1) continue; // nobody buys it
+            if (vol < 3) continue; // too few sales to trust the sale price
             double net = sale - cost;
             if (net <= 0) continue;
+            // Huge margins on thin markets are almost always items whose value Coflnet's median does not capture
+            // (e.g. Midas weapons, valued by the price paid for them).
+            if (net / cost > 1.0 && vol < 10) continue;
             why.add(0, "Coflnet craft flip. Ingredients re-priced with live data:");
             why.add(saleLine);
             JsonObject req = obj(o, "reqCollection");

@@ -189,6 +189,8 @@ public final class AuctionAnalyzer {
         if (net <= 0) return null;
         if (v.saleHours() > config.strategy.ahMaxSaleHours) return null;
         if (!clearsNoise(net, sale, v.volatility(), config.strategy.ahNoiseMargin)) return null;
+        // Live forward test: without these, 844-coin flips and 9%-confidence guesses were listed next to real deals.
+        if (net < config.risk.minNetProfit || net / price < config.risk.minRoi || v.confidence() < config.risk.minConfidence) return null;
 
         double discount = v.fairValue() > 0 ? 1 - price / v.fairValue() : 0;
         List<String> why = new ArrayList<>(v.explanation());

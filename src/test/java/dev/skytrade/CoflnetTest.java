@@ -82,8 +82,9 @@ class CoflnetTest {
             String tag = f.get("itemTag").getAsString();
             // Live book with a wide spread: profitable for everything that is not flagged.
             products.add(TestData.product(tag, 1_000_000, 1_500_000, 700_000));
+            double coflHours = (num(f, "estimatedBuyFillSeconds") + num(f, "estimatedSellFillSeconds")) / 3600;
             if (o.get("isManipulated").getAsBoolean()) manipulated = tag;
-            else if (good == null) good = tag;
+            else if (good == null && coflHours > 0 && coflHours < 12) good = tag; // fillable within the holding limit
         }
         assertNotNull(manipulated, "sample contains manipulated flips");
         var bz = TestData.snapshot(0, products.toArray(new BazaarProduct[0]));
@@ -98,6 +99,16 @@ class CoflnetTest {
         // A live book with no spread left: the deal disappears.
         var tight = TestData.snapshot(0, TestData.product(g, 1_000_000, 1_000_000.5, 700_000));
         assertTrue(call("bazaarSpread", spread, tight, ItemCatalog.EMPTY, new SkyTradeConfig()).isEmpty());
+
+        // A dead book (huge spread, a few sales a week) is dropped however large the "profit" looks.
+        var dead = TestData.snapshot(0, TestData.product(g, 2_500_000, 100_000_000, 4));
+        assertTrue(call("bazaarSpread", spread, dead, ItemCatalog.EMPTY, new SkyTradeConfig()).isEmpty(), "dead books are bait");
+        var slow = TestData.snapshot(0, TestData.product(g, 1_000_000, 1_500_000, 20));
+        assertTrue(call("bazaarSpread", spread, slow, ItemCatalog.EMPTY, new SkyTradeConfig()).isEmpty(), "unfillable within 3x the holding limit");
+    }
+
+    private static double num(JsonObject o, String k) {
+        return o.has(k) && o.get(k).isJsonPrimitive() ? o.get(k).getAsDouble() : 0;
     }
 
     @Test
