@@ -49,8 +49,9 @@ test {
     useJUnitPlatform()
     // Opt-in live test against the public Hypixel API: ./gradlew test -Dskytrade.live=true
     systemProperty "skytrade.live", System.getProperty("skytrade.live", "false")
+    for (p in ["skytrade.bench", "skytrade.benchData", "skytrade.forward", "skytrade.forwardMinutes", "skytrade.forwardOut", "skytrade.forwardCoflnetRpm"]) { if (System.getProperty(p) != null) systemProperty p, System.getProperty(p) }
     systemProperty "skytrade.liveWaitMs", System.getProperty("skytrade.liveWaitMs", "40000")
-    testLogging { showStandardStreams = System.getProperty("skytrade.live") == "true" }
+    testLogging { showStandardStreams = System.getProperty("skytrade.live") == "true" || System.getProperty("skytrade.forward") == "true" || System.getProperty("skytrade.bench") == "true" }
 }
 
 java {

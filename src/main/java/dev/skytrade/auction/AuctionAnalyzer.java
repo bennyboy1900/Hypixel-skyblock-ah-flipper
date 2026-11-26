@@ -123,6 +123,7 @@ public final class AuctionAnalyzer {
         why.add("Item: " + a.skyblockId() + " [" + a.rarity() + "]" + (a.isPet() ? " lvl " + a.petLevel() : ""));
         why.add("Not enough local sales yet: valued from the market (Coflnet 7-day history + identical listings).");
         long lowest = competing.get(0);
+        if (!Stats.plausibleCoins(lowest) || !MarketGuard.sane(h)) return null;
         double resale = lowest * (1 - p.undercut());
         why.add(competing.size() + " identical listings from other sellers; cheapest " + Fmt.coins(lowest)
                 + ", next " + Fmt.coins(competing.get(Math.min(1, competing.size() - 1))) + ". Undercut to " + Fmt.coins(resale) + ".");

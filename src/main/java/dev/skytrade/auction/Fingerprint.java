@@ -25,12 +25,13 @@ public final class Fingerprint {
     private Fingerprint() {}
 
     public static String base(ItemAttributes a) {
-        return a.isPet() ? a.skyblockId() + "|" + a.rarity() : a.skyblockId();
+        String id = a.variant() == null ? a.skyblockId() : a.skyblockId() + "{" + a.variant() + "}";
+        return a.isPet() ? id + "|" + a.rarity() : id;
     }
 
     public static String relaxed(ItemAttributes a) {
         StringJoiner j = new StringJoiner("|");
-        j.add(a.skyblockId()).add(a.rarity());
+        j.add(a.variant() == null ? a.skyblockId() : a.skyblockId() + "{" + a.variant() + "}").add(a.rarity());
         if (a.isPet()) j.add("lvl" + PetLevels.bucket(a.petLevel()));
         else j.add("s" + (a.dungeonStars() + a.masterStars()));
         if (!a.attributes().isEmpty()) j.add("attr" + attributeKey(a.attributes()));

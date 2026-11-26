@@ -3,6 +3,7 @@ package dev.skytrade.auction;
 import dev.skytrade.config.SkyTradeConfig;
 import dev.skytrade.external.PriceHistoryStats;
 import dev.skytrade.util.Fmt;
+import dev.skytrade.util.Stats;
 import dev.skytrade.valuation.Valuation;
 
 import java.util.ArrayList;
@@ -32,10 +33,16 @@ public final class MarketGuard {
 
     public static Result check(Valuation v, long listingPrice, PriceHistoryStats h, SkyTradeConfig.External cfg) {
         List<String> lines = new ArrayList<>();
-        if (!cfg.enabled) return new Result(false, "", 1, 1, true, lines);
         double fair = v.fairValue();
+        if (!Stats.plausibleCoins(fair) || !Stats.plausibleCoins(listingPrice) || !Stats.plausibleCoins(v.salePrice())) {
+            return reject("invalid valuation numbers", lines);
+        }
+        if (!cfg.enabled) return new Result(false, "", 1, 1, true, lines);
         double discount = fair > 0 ? 1 - listingPrice / fair : 0;
 
+        if (h != null && h.usable() && !sane(h)) {
+            return reject("7-day history is inconsistent (" + h + ")", lines);
+        }
         if (h == null || !h.usable()) {
             lines.add("No 7-day price history yet (requested). Treat as unconfirmed.");
             if (discount > cfg.deepDiscount) {
@@ -72,6 +79,7 @@ public final class MarketGuard {
                     + Fmt.coins(h.high()) + "): likely manipulated sales", lines);
         }
 
+        if (mult < 0.2) return reject("history says the value is far below the estimate (x" + String.format(java.util.Locale.ROOT, "%.2f", mult) + ")", lines);
         double adjustedFair = fair * mult;
         double adjustedDiscount = adjustedFair > 0 ? 1 - listingPrice / adjustedFair : 0;
         if (adjustedDiscount > cfg.deepDiscount) {
@@ -85,6 +93,18 @@ public final class MarketGuard {
             lines.add("Deep discount accepted: exact match and consistent with 7-day history. Still check the item before buying.");
         }
         return new Result(false, "", mult, conf, true, lines);
+    }
+
+    private static boolean finite(double d) {
+        return !Double.isNaN(d) && !Double.isInfinite(d);
+    }
+
+    /** History numbers must be finite, at least one coin, and ordered low <= median <= high (within rounding). */
+    static boolean sane(PriceHistoryStats h) {
+        if (!finite(h.median()) || !finite(h.recent()) || !finite(h.low()) || !finite(h.high()) || !finite(h.trend())) return false;
+        if (h.median() < 1 || h.recent() < 1 || h.low() < 1 || h.high() < 1) return false;
+        if (h.high() > Stats.MAX_COINS) return false;
+        return h.low() <= h.median() * 1.001 && h.median() <= h.high() * 1.001;
     }
 
     private static Result reject(String reason, List<String> lines) {

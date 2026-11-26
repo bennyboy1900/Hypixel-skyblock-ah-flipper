@@ -70,6 +70,21 @@ class ValuationGuardTest {
     }
 
     @Test
+    void variantsSeparateProductsWithTheSameId() {
+        assertEquals("year250", dev.skytrade.auction.ItemDecoder.variant("NEW_YEAR_CAKE", Map.of("new_years_cake", 250), Map.of()));
+        assertEquals("sharpness7", dev.skytrade.auction.ItemDecoder.variant("ENCHANTED_BOOK", Map.of(), new TreeMap<>(Map.of("sharpness", 7))));
+        assertEquals("rune_blood2", dev.skytrade.auction.ItemDecoder.variant("RUNE", Map.of("runes", Map.of("BLOOD", 2)), Map.of()));
+        assertNull(dev.skytrade.auction.ItemDecoder.variant("HYPERION", Map.of(), Map.of("sharpness", 7)), "enchants on gear are upgrades, not identity");
+        ItemAttributes y1 = new ItemAttributes("NEW_YEAR_CAKE", "RARE", null, Map.of(), null, 0, false, 0, 0, Map.of(), 0, 0, List.of(), false,
+                null, 0, null, 0, null, Map.of(), 1, "Cake", Map.of(), List.of(), "year1");
+        ItemAttributes y250 = new ItemAttributes("NEW_YEAR_CAKE", "RARE", null, Map.of(), null, 0, false, 0, 0, Map.of(), 0, 0, List.of(), false,
+                null, 0, null, 0, null, Map.of(), 1, "Cake", Map.of(), List.of(), "year250");
+        assertNotEquals(Fingerprint.base(y1), Fingerprint.base(y250));
+        assertNotEquals(Fingerprint.relaxed(y1), Fingerprint.relaxed(y250));
+        assertNotEquals(Fingerprint.strict(y1), Fingerprint.strict(y250));
+    }
+
+    @Test
     void recoveryDependsOnUpgradeKind() {
         double base = 0.55;
         assertTrue(UpgradeValuer.recovery(UpgradeValuer.Kind.GEMSTONE, base) > UpgradeValuer.recovery(UpgradeValuer.Kind.HOT_POTATO, base));

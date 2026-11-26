@@ -3,6 +3,7 @@ package dev.skytrade.valuation;
 import dev.skytrade.auction.ItemAttributes;
 import dev.skytrade.market.ItemCatalog;
 import dev.skytrade.market.SkyblockItem;
+import dev.skytrade.util.Stats;
 
 import java.util.*;
 
@@ -172,10 +173,10 @@ public final class UpgradeValuer {
         int priced = 0, unpriced = 0;
         List<String> lines = new ArrayList<>();
         for (UpgradeComponent c : comps) {
-            if (c.itemId().startsWith("~")) continue; // markers
+            if (c.itemId().startsWith("~") || c.quantity() <= 0) continue; // markers, corrupt counts
             Kind kind = kind(c.itemId());
             Priced p = unitPrice(c.itemId(), prices);
-            if (!(p.price > 0) || Double.isInfinite(p.price)) {
+            if (!Stats.plausibleCoins(p.price)) {
                 // Unknown cheap enchants are common and harmless; only report the others.
                 if (kind != Kind.ENCHANT) {
                     unpriced++;
@@ -184,6 +185,11 @@ public final class UpgradeValuer {
                 continue;
             }
             double cost = p.price * c.quantity();
+            if (!Stats.plausibleCoins(cost)) {
+                unpriced++;
+                lines.add(c.label() + " " + c.itemId() + ": price out of range (valued at 0)");
+                continue;
+            }
             if (kind == Kind.ENCHANT && cost < minEnchantCost) continue;
             double rate = recovery(kind, baseRecovery);
             priced++;

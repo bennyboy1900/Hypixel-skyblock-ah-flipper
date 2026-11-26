@@ -22,8 +22,10 @@ import java.util.*;
  * </ol>
  *
  * <p>Before any of that, comparables are cleaned of manipulation (see {@link #filterWashTrades}): sales in
- * which the listing's own seller took part are dropped, each seller/buyer pair counts once and each seller
- * at most twice, so a few accounts trading an item back and forth cannot set its price.</p>
+ * which the listing's own seller took part are dropped and each seller/buyer pair counts once, so a few
+ * accounts trading an item back and forth cannot set its price. A seller who sells many copies to many
+ * different buyers is real demand and is kept (backtest on recorded Hypixel sales: a per-seller cap threw
+ * away most valid comparables of bulk-sold items); a dominant seller only lowers confidence.</p>
  */
 public final class FairValueEstimator {
     /** @param minEnchantCost enchant books cheaper than this are ignored when valuing upgrades */
@@ -33,9 +35,6 @@ public final class FairValueEstimator {
             this(minComparables, recoveryRate, undercut, lookbackMs, halfLifeMs, UpgradeValuer.DEFAULT_MIN_ENCHANT_COST);
         }
     }
-
-    /** Max comparable sales any single seller may contribute. */
-    static final int MAX_PER_SELLER = 2;
 
     private final SalesHistory history;
     private final PriceSource prices;
@@ -203,8 +202,7 @@ public final class FairValueEstimator {
      * Removes comparables that look like wash trades or self-dealing:
      * <ul>
      *   <li>any sale in which the evaluated listing's seller was the seller or the buyer,</li>
-     *   <li>repeated sales between the same seller and buyer (only the first counts),</li>
-     *   <li>more than {@link #MAX_PER_SELLER} sales by one seller (the most recent ones are kept).</li>
+     *   <li>repeated sales between the same seller and buyer (only the most recent counts).</li>
      * </ul>
      * Sales without seller/buyer data (older records) pass unchanged.
      */
@@ -213,9 +211,8 @@ public final class FairValueEstimator {
         List<SaleRecord> sorted = new ArrayList<>(sales);
         sorted.sort(Comparator.comparingLong(SaleRecord::timestamp).reversed());
         Set<String> pairs = new HashSet<>();
-        Map<String, Integer> perSeller = new HashMap<>();
         List<SaleRecord> out = new ArrayList<>(sorted.size());
-        int self = 0, repeat = 0, capped = 0;
+        int self = 0, repeat = 0;
         for (SaleRecord s : sorted) {
             if (listingSeller != null && (listingSeller.equals(s.seller()) || listingSeller.equals(s.buyer()))) {
                 self++;
@@ -225,15 +222,10 @@ public final class FairValueEstimator {
                 repeat++;
                 continue;
             }
-            if (s.seller() != null && perSeller.merge(s.seller(), 1, Integer::sum) > MAX_PER_SELLER) {
-                capped++;
-                continue;
-            }
             out.add(s);
         }
         if (self > 0) why.add("Ignored " + self + " " + label + " sale(s) involving this listing's seller (possible self-pumping).");
         if (repeat > 0) why.add("Ignored " + repeat + " repeated " + label + " sale(s) between the same two players (wash trading).");
-        if (capped > 0) why.add("Ignored " + capped + " " + label + " sale(s) beyond " + MAX_PER_SELLER + " per seller.");
         return out;
     }
 

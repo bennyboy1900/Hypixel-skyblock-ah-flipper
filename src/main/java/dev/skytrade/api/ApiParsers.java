@@ -82,7 +82,7 @@ public final class ApiParsers {
             String id = str(a, "auction_id", null);
             long price = lng(a, "price");
             String bytes = str(a, "item_bytes", null);
-            if (id == null || price <= 0 || bytes == null) continue;
+            if (id == null || !dev.skytrade.util.Stats.plausibleCoins(price) || bytes == null) continue;
             out.add(new EndedAuction(id, price, bool(a, "bin"), lng(a, "timestamp"), bytes, str(a, "seller", null), str(a, "buyer", null)));
         }
         return out;

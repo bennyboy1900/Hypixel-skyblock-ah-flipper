@@ -162,7 +162,28 @@ public final class ItemDecoder {
                 ultimate, ultimateLevel, recomb, dungeonStars, masterStars, Collections.unmodifiableMap(gems),
                 hot, fuming, List.copyOf(scrolls), Nbt.integer(ea, "art_of_war_count", 0) > 0, petType, petLevel,
                 petItem, candy, skin, Collections.unmodifiableMap(attrs), count, name,
-                Collections.unmodifiableMap(extras), List.copyOf(unlockedSlots));
+                Collections.unmodifiableMap(extras), List.copyOf(unlockedSlots), variant(id, ea, ench));
+    }
+
+    /**
+     * Identity qualifiers that make items with one id different products with very different prices.
+     * Returns null for ordinary items.
+     */
+    public static String variant(String id, Map<String, Object> ea, Map<String, Integer> ench) {
+        StringJoiner j = new StringJoiner(",");
+        if ("ENCHANTED_BOOK".equals(id) && !ench.isEmpty()) ench.forEach((k, v) -> j.add(k + v)); // the book IS its enchants
+        int cake = Nbt.integer(ea, "new_years_cake", -1);
+        if (cake >= 0) j.add("year" + cake);
+        Map<String, Object> runes = Nbt.compound(ea, "runes");
+        if (runes != null) new TreeMap<>(runes).forEach((k, v) -> j.add("rune_" + k.toLowerCase(Locale.ROOT) + (v instanceof Number n ? n.intValue() : 0)));
+        for (String key : List.of("party_hat_color", "party_hat_emoji", "potion", "potion_type")) {
+            String v = Nbt.string(ea, key, null);
+            if (v != null && !v.isBlank()) j.add(key + "=" + v.toLowerCase(Locale.ROOT));
+        }
+        int potionLevel = Nbt.integer(ea, "potion_level", 0);
+        if (potionLevel > 0) j.add("plvl" + potionLevel);
+        if (Nbt.integer(ea, "is_shiny", 0) > 0) j.add("shiny");
+        return j.length() == 0 ? null : j.toString();
     }
 
     /** The last lore line carries the rarity (e.g. "§6§lLEGENDARY SWORD"). */

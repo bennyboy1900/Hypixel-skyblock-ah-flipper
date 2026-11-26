@@ -7,6 +7,17 @@ import java.util.Collection;
 public final class Stats {
     private Stats() {}
 
+    /**
+     * Upper bound for any plausible SkyBlock coin amount (1 trillion). Larger values only come from corrupt or
+     * malicious data and are treated as unknown, so they can never overflow a sum or dominate a valuation.
+     */
+    public static final double MAX_COINS = 1e12;
+
+    /** True for a finite, positive coin amount not above {@link #MAX_COINS}. */
+    public static boolean plausibleCoins(double v) {
+        return v > 0 && v <= MAX_COINS;
+    }
+
     public static double median(double[] values) {
         return percentile(values, 0.5);
     }

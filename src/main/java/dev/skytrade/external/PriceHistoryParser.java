@@ -40,7 +40,7 @@ public final class PriceHistoryParser {
             double max = num(o, "max", avg);
             long vol = (long) num(o, "volume", num(o, "count", 1));
             long t = time(o.get("time"));
-            if (!(avg > 0) || !(min > 0) || !(max > 0) || t <= 0 || vol <= 0) continue;
+            if (!Stats.plausibleCoins(avg) || !Stats.plausibleCoins(min) || !Stats.plausibleCoins(max) || t <= 0 || vol <= 0 || vol > 1e9) continue;
             out.add(new Bucket(t, Math.min(min, avg), Math.max(max, avg), avg, vol));
         }
         out.sort(Comparator.comparingLong(Bucket::time));
