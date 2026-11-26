@@ -164,13 +164,12 @@ class ValuationGuardTest {
 
     @Test
     void externalUrlSplitsPetRarity() {
-        var cfg = new SkyTradeConfig().external;
         ItemAttributes pet = new ItemAttributes("PET_ENDER_DRAGON", "LEGENDARY", null, Map.of(), null, 0, false, 0, 0, Map.of(), 0, 0,
                 List.of(), false, "ENDER_DRAGON", 100, null, 0, null, Map.of(), 1, "Ender Dragon");
         assertEquals("PET_ENDER_DRAGON|LEGENDARY", ExternalPriceService.key(pet));
-        assertEquals("https://sky.coflnet.com/api/item/price/PET_ENDER_DRAGON/history/week?Rarity=LEGENDARY",
-                ExternalPriceService.url("PET_ENDER_DRAGON|LEGENDARY", cfg));
-        assertEquals("https://sky.coflnet.com/api/item/price/HYPERION/history/week", ExternalPriceService.url("HYPERION", cfg));
+        assertEquals("/api/item/price/PET_ENDER_DRAGON/history/week?Rarity=LEGENDARY",
+                ExternalPriceService.historyPath("PET_ENDER_DRAGON|LEGENDARY"));
+        assertEquals("/api/item/price/HYPERION/history/week", ExternalPriceService.historyPath("HYPERION"));
     }
 
     private static Valuation valuation(double fair, String level, double upgradeCredit) {

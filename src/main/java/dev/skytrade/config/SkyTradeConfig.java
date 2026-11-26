@@ -52,8 +52,22 @@ public final class SkyTradeConfig {
         public boolean enabled = true;
         /** Coflnet SkyBlock API. Only item tags (and pet rarity) are sent. */
         public String baseUrl = "https://sky.coflnet.com";
+        /** Shared budget for every Coflnet request. Coflnet blocks IPs that go over its limit, so keep this low. */
         public int maxRequestsPerMinute = 20;
         public int cacheMinutes = 30;
+        /** Bulk lowest-BIN list for all items (one request). */
+        public int bulkRefreshMinutes = 10;
+        /** Coflnet's free flip lists (bazaar spread, crafts, Kat), re-checked locally, shown on the Deals page. */
+        public boolean dealsEnabled = true;
+        public int dealsRefreshMinutes = 5;
+        public double dealsMinProfit = 200_000;
+        /**
+         * Before enough local sales exist, value a listing from identical competing listings, confirmed by the
+         * 7-day history. Lower confidence; deep discounts are still rejected.
+         */
+        public boolean marketFallback = true;
+        /** Identical listings from other sellers needed for the market fallback. */
+        public int minCompetingListings = 2;
         /** Without 7-day history an AH flip is shown as "unconfirmed", gets lower confidence and no alert. */
         public boolean requireConfirmation = true;
         /** Items with fewer sales than this in 7 days are rejected as illiquid. */

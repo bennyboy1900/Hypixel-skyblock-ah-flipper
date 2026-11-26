@@ -47,7 +47,7 @@ Data lives in `.minecraft/config/skytrade/`:
 | Command | Action |
 | --- | --- |
 | `/skytrade` | Open the terminal (dashboard) |
-| `/skytrade bazaar`, `ah`, `portfolio`, `settings` | Open a specific page |
+| `/skytrade bazaar`, `ah`, `deals`, `portfolio`, `settings` | Open a specific page |
 | `/skytrade status` | API health, data age, portfolio, sandbox verdict in chat |
 | `/skytrade pause` / `resume` | Pause or resume sandbox trading (resume also clears emergency stop) |
 | `/skytrade resetpaper confirm` | Reset the paper/sandbox portfolio |
@@ -164,6 +164,36 @@ potato books, reforge stones and gem-slot unlocks the least. Upgrades that are v
 
 Exact comparables are also corrected for smaller upgrade differences the fingerprint does not
 cover.
+
+### Coflnet price data
+Hypixel only exposes the last ~60 seconds of sales, so without outside data the mod would need hours
+before it could value anything. The free Coflnet SkyBlock API fills the gap. Only item tags and pet
+rarity are sent.
+
+| Endpoint | Used for | Frequency |
+| --- | --- | --- |
+| `/api/prices/neu` | lowest BIN of every AH item, used to price upgrades not on the bazaar | 1 request every 10 min |
+| `/api/item/price/{tag}/history/week` | hourly 7-day history: confirms flips, catches pumps | best candidates of each scan, cached 30 min |
+| `/api/flip/bazaar/spread`, `/api/craft/profit`, `/api/kat/profit` | the **Deals** page | 3 requests every 5 min |
+
+- **One shared budget** (`external.maxRequestsPerMinute`, default 20). Coflnet blocks IPs that go
+  over its limit (HTTP 403 `"blocked"`). When that happens, every Coflnet request pauses for
+  30 minutes and `/skytrade status` shows `BLOCKED`.
+- **Valuation from day one (market fallback):** a listing without enough local sales is valued from
+  identical listings by other sellers (at least 2, the cheapest one undercut). The result is capped at
+  1.25× the 7-day median plus the item's upgrades, and at most the 7-day high. It needs at least 10
+  sales in 7 days. Confidence is capped at 60%, and discounts above 50% are still rejected. These
+  flips show `mkt` in the Comps column.
+- **Deals page** (`/skytrade deals`): Coflnet's lists are only leads, and every deal is re-checked
+  against the mod's own live data:
+  - **Bazaar spread:** flips Coflnet flags as manipulated are dropped. Entry and exit are
+    recomputed from the live order book after tax.
+  - **Crafts:** bazaar ingredients are re-priced at the live instant-buy price. The sale uses the
+    lower of Coflnet's price and its median, after AH fees.
+  - **Kat:** the pet's auction must still be active at that price in the mod's own AH scan.
+    Materials are re-priced from the bazaar.
+  - Deals that are no longer profitable disappear. *Type in chat* puts the command (`/bz`,
+    `/viewrecipe`, `/viewauction`) into your chat box; you press Enter.
 
 ### Anti-manipulation
 - **Wash trading:** sales in which the listing's own seller was the seller or the buyer are ignored.

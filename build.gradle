@@ -49,6 +49,7 @@ test {
     useJUnitPlatform()
     // Opt-in live test against the public Hypixel API: ./gradlew test -Dskytrade.live=true
     systemProperty "skytrade.live", System.getProperty("skytrade.live", "false")
+    systemProperty "skytrade.liveWaitMs", System.getProperty("skytrade.liveWaitMs", "40000")
     testLogging { showStandardStreams = System.getProperty("skytrade.live") == "true" }
 }
 

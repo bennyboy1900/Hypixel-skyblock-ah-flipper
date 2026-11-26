@@ -19,6 +19,9 @@ import dev.skytrade.database.CsvExporter;
 import dev.skytrade.database.Database;
 import dev.skytrade.database.Repository;
 import dev.skytrade.execution.Trade;
+import dev.skytrade.external.CoflnetClient;
+import dev.skytrade.external.DealsService;
+import dev.skytrade.external.ExternalDeal;
 import dev.skytrade.external.ExternalPriceService;
 import dev.skytrade.execution.TradeEngine;
 import dev.skytrade.execution.sandbox.AutoTrader;
@@ -88,7 +91,10 @@ public final class SkyTradeCore implements AutoCloseable {
     private final ApiStatus apiStatus = new ApiStatus();
     private final HypixelApiClient api;
     private final MarketDataService market;
+    private final CoflnetClient coflnet;
     private final ExternalPriceService external;
+    private final DealsService deals;
+    private final Map<String, Long> dealAlerts = new ConcurrentHashMap<>();
     private final RecipeRepository recipes = new RecipeRepository();
     private final NotificationService notifications;
     private final PortfolioService portfolio;
@@ -118,7 +124,9 @@ public final class SkyTradeCore implements AutoCloseable {
         this.api = new HypixelApiClient(() -> config().api, apiStatus, time, tasks.computeExecutor());
         this.market = new MarketDataService(api, this::config, time, new ItemDecoder(120_000), new SalesHistory(200, 20_000),
                 new MarketHistory(288, config().database.historyIntervalSeconds * 1000L));
-        this.external = new ExternalPriceService(() -> config().external, time);
+        this.coflnet = new CoflnetClient(() -> config().external, time);
+        this.external = new ExternalPriceService(() -> config().external, time, coflnet);
+        this.deals = new DealsService(this::config, time, coflnet);
         this.notifications = new NotificationService(this::config, time);
         this.portfolio = new PortfolioService(config().sandbox.startingCapital);
         this.simulator = new MarketSimulator(time, config().sandbox.rngSeed, config().sandbox.failureRate, o -> repo.saveSimOrder(o));
@@ -193,6 +201,9 @@ public final class SkyTradeCore implements AutoCloseable {
         })));
         schedules.add(tasks.every("trader.decide", 20_000, Math.max(10, config().sandbox.decisionIntervalSeconds) * 1000L, () -> onTrader(this::decide)));
         schedules.add(tasks.every("external.history", 8_000, 3_000, external::drain));
+        schedules.add(tasks.every("external.deals", 12_000, 5_000, () -> {
+            if (deals.poll()) refreshDeals();
+        }));
         schedules.add(tasks.every("craft.analysis", 30_000, 120_000, this::analyzeCrafts));
         schedules.add(tasks.every("db.cleanup", 60_000, 6 * 3_600_000L, () -> repo.cleanup(config().database, time.now())));
         schedules.add(tasks.every("memory.prune", 300_000, 3_600_000L, () -> onTrader(() -> {
@@ -241,6 +252,7 @@ public final class SkyTradeCore implements AutoCloseable {
         Results r = results;
         results = new Results(List.copyOf(opps), r.auctions(), r.crafts(), now, r.auctionComputedAt(), r.craftComputedAt());
         notifications.checkOpportunities(opps);
+        refreshDeals();
     }
 
     private void analyzeAuctions(AuctionSnapshot snap) {
@@ -251,7 +263,8 @@ public final class SkyTradeCore implements AutoCloseable {
         FairValueEstimator est = new FairValueEstimator(market.sales(), this::componentPrice, market.catalog());
         double maxCap = portfolio.view().totalValue() > 0 ? portfolio.view().totalValue() * config().risk.maxCapitalPerTradePct
                 : config().sandbox.startingCapital * config().risk.maxCapitalPerTradePct;
-        List<AuctionOpportunity> opps = new AuctionAnalyzer(config(), external, market.catalog()).analyze(idx, est, maxCap, time.now());
+        List<AuctionOpportunity> opps = new AuctionAnalyzer(config(), external, market.catalog()).withPrices(this::componentPrice)
+                .analyze(idx, est, maxCap, time.now());
         for (int i = 0; i < Math.min(20, opps.size()); i++) {
             AuctionOpportunity o = opps.get(i);
             repo.saveValuation(time.now(), o.uuid(), o.itemId(), o.listingPrice(), o.valuation());
@@ -261,6 +274,25 @@ public final class SkyTradeCore implements AutoCloseable {
         Log.info("analysis.auctions", "decoded", idx.decodedCount(), "failed", idx.failedCount(), "groups", idx.groups().size(),
                 "opportunities", opps.size(), "ms", time.now() - t0);
         notifications.checkOpportunities(opps);
+        refreshDeals();
+    }
+
+    /** Re-checks Coflnet's deal lists against live data and alerts about the best new one. */
+    private void refreshDeals() {
+        deals.recompute(market.bazaar(), auctionIndex, market.catalog());
+        SkyTradeConfig cfg = config();
+        if (!cfg.notifications.opportunityAlerts) return;
+        long now = time.now();
+        for (ExternalDeal d : deals.deals()) {
+            if (d.netProfit() < cfg.assist.alertMinProfit) break; // sorted by profit
+            Long last = dealAlerts.get(d.key());
+            if (last != null && now - last < 3_600_000L) continue;
+            dealAlerts.put(d.key(), now);
+            notifications.post(Notification.Level.SUCCESS, d.source(), d.name() + ": " + Fmt.signedCoins(d.netProfit())
+                    + " (cost " + Fmt.coins(d.cost()) + ")", cfg.assist.clickableAlerts ? d.command() : null);
+            break; // at most one deal alert per refresh
+        }
+        if (dealAlerts.size() > 2000) dealAlerts.clear();
     }
 
     private void analyzeCrafts() {
@@ -278,7 +310,11 @@ public final class SkyTradeCore implements AutoCloseable {
         BazaarSnapshot bz = market.bazaar();
         BazaarProduct p = bz == null ? null : bz.get(id);
         if (p != null && p.bestBid() > 0) return p.bestBid();
-        return auctionIndex.lowestCleanBin(id);
+        // Non-bazaar items: the lower of our own scan's cheapest clean BIN and Coflnet's lowest BIN.
+        double local = auctionIndex.lowestCleanBin(id);
+        double remote = external.lowestBin(id);
+        if (local > 0 && remote > 0) return Math.min(local, remote);
+        return local > 0 ? local : remote;
     }
 
     // ------------------------------------------------------------------ trading
@@ -453,6 +489,7 @@ public final class SkyTradeCore implements AutoCloseable {
     public ConfigManager configManager() { return configManager; }
     public MarketDataService market() { return market; }
     public ExternalPriceService external() { return external; }
+    public DealsService deals() { return deals; }
     public Results results() { return results; }
     public AuctionIndex auctionIndex() { return auctionIndex; }
     public PortfolioView portfolio() { return portfolio.view(); }
